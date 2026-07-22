@@ -1,0 +1,5 @@
+/* Dark theme highlight.js styles — already handled by CSS variables.
+   This file can be used for hljs theme overrides in dark mode. */
+[data-theme="dark"] .hljs {
+  background: var(--md-code-bg);
+}

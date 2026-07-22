@@ -1,0 +1,4 @@
+/* Light theme highlight.js styles */
+[data-theme="light"] .hljs {
+  background: var(--md-code-bg);
+}

@@ -1,0 +1,2 @@
+/* Content script minimal CSS — hides original page content when reader takes over */
+body { margin: 0; padding: 0; }

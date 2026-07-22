@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Reader</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <div class="popup-header">
+      <span class="popup-logo">M</span>
+      <div>
+        <h1 class="popup-title">Markdown Reader</h1>
+        <p class="popup-version">v1.0.0</p>
+      </div>
+    </div>
+
+    <div class="popup-section">
+      <h2 class="popup-section-title">Feature Settings</h2>
+
+      <div class="popup-feature-list">
+        <div class="popup-feature" data-key="allPlugins">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">All Built-in Markdown Plugins</div>
+          </div>
+        </div>
+
+        <div class="popup-feature" data-key="showOutline">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">Auto-generate Outline</div>
+          </div>
+        </div>
+
+        <div class="popup-feature" data-key="autoRefresh">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">Auto-refresh Document</div>
+          </div>
+        </div>
+
+        <div class="popup-feature" data-key="centerContent">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">Center Document Content</div>
+          </div>
+        </div>
+
+        <div class="popup-feature" data-key="customWidth">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">Custom Content Width</div>
+            <input type="number" class="popup-input" id="contentWidth" min="400" max="2000" step="50" />
+          </div>
+        </div>
+
+        <div class="popup-feature" data-key="customCSS">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">Custom CSS</div>
+          </div>
+        </div>
+
+        <div class="popup-feature" data-key="adjustFont">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">Adjust Font</div>
+            <div class="popup-font-controls">
+              <button class="popup-font-btn" id="fontDec">A-</button>
+              <span class="popup-font-size" id="fontSizeDisplay">16</span>
+              <button class="popup-font-btn" id="fontInc">A+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="popup-feature" data-key="showFileTree">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">Folder Directory</div>
+          </div>
+        </div>
+
+        <div class="popup-feature" data-key="pluginOptions">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">Markdown plugin options</div>
+          </div>
+        </div>
+
+        <div class="popup-feature popup-feature-info">
+          <span class="popup-check popup-check-info">🚀</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">More Features in Development</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="popup-section">
+      <h2 class="popup-section-title">Theme</h2>
+      <div class="popup-theme-toggle">
+        <button class="popup-theme-btn" data-theme="light">
+          <span>☀️</span> Light
+        </button>
+        <button class="popup-theme-btn" data-theme="dark">
+          <span>🌙</span> Dark
+        </button>
+      </div>
+    </div>
+
+    <div class="popup-section" id="popup-activate-section" style="display:none;">
+      <button class="popup-activate-btn" id="popupActivateReader">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        Open in Markdown Reader
+      </button>
+      <div class="popup-activate-hint">This page is already rendered — click to switch to reader mode</div>
+    </div>
+
+    <div class="popup-footer">
+      <span id="popup-status-text">Open a .md file to activate</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

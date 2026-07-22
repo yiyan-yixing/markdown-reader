@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "Markdown Reader",
+  "version": "1.0.0",
+  "description": "Beautiful Markdown reader with outline, file tree, themes and more. Intercepts .md URLs and GitHub/GitLab blob pages.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://raw.githubusercontent.com/*",
+    "https://gitlab.com/*",
+    "https://bitbucket.org/*"
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidebar/sidebar.html"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "file:///*",
+        "*://*/*.md",
+        "*://*/*.markdown",
+        "*://*/*.mdown",
+        "*://*/*.mkd",
+        "*://*/*.md*"
+      ],
+      "js": [
+        "lib/marked.min.js",
+        "lib/highlight.min.js",
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css",
+        "styles/reader.css",
+        "styles/themes/dark.css",
+        "styles/themes/light.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
