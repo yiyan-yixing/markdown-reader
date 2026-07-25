@@ -1,0 +1,46 @@
+name: Package & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label (e.g. 1.0.1)'
+        required: true
+        type: string
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  package:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create extension package
+        run: |
+          mkdir -p dist
+          # Copy production files
+          cp manifest.json dist/
+          cp -r background dist/
+          cp -r content dist/
+          cp -r icons dist/
+          cp -r lib dist/
+          cp -r popup dist/
+          cp -r sidebar dist/
+          cp -r styles dist/
+          # Remove non-production files
+          rm -f dist/background/*.md
+          rm -f dist/content/*.md
+
+      - name: Create ZIP archive
+        run: |
+          cd dist
+          zip -r ../markdown-reader-${{ inputs.version }}.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: markdown-reader-${{ inputs.version }}
+          path: markdown-reader-${{ inputs.version }}.zip
