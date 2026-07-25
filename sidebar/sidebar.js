@@ -10,6 +10,25 @@
   const searchInput = document.getElementById('sidebarSearch');
   const searchStatus = document.getElementById('sidebarSearchStatus');
 
+  // Delegated click handler: toggle dir expand on .tree-dir-header
+  // Works for both programmatic and raw-HTML tree items (e.g., test).
+  treeContainer?.addEventListener('click', e => {
+    const header = e.target.closest('.tree-dir-header');
+    if (!header) return;
+    const dir = header.parentElement;
+    if (!dir) return;
+    const arrow = header.querySelector('.tree-arrow');
+    const children = dir.querySelector(':scope > .tree-dir-children');
+    if (!arrow || !children) return;
+    const isCollapsed = children.classList.contains('collapsed');
+    arrow.classList.toggle('open');
+    children.classList.toggle('collapsed');
+    if (!searchActive) {
+      const name = header.querySelector('.tree-name')?.textContent || '';
+      savedCollapsedState.set(name, isCollapsed);
+    }
+  });
+
   // Saved collapsed state per directory (restored when search clears)
   let savedCollapsedState = new Map();
   let searchActive = false;
@@ -65,13 +84,16 @@
         });
       }
 
+      // Event delegation on treeContainer handles clicks (both
+      // programmatic and raw-HTML items). Individual listener kept for
+      // closure-based `item.path` reference in savedCollapsedState.
       header.addEventListener('click', () => {
         const arrow = header.querySelector('.tree-arrow');
+        const children = header.parentElement?.querySelector(':scope > .tree-dir-children');
+        if (!arrow || !children) return;
         const isCollapsed = children.classList.contains('collapsed');
         arrow.classList.toggle('open');
         children.classList.toggle('collapsed');
-
-        // If not searching, remember the toggle
         if (!searchActive) {
           savedCollapsedState.set(item.path || item.name, isCollapsed);
         }

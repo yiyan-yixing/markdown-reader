@@ -462,6 +462,7 @@ async function main() {
     try {
       var sidebarHtml = fs.readFileSync(path.join(ROOT_DIR, 'sidebar/sidebar.html'), 'utf-8');
       var sidebarCss  = fs.readFileSync(path.join(ROOT_DIR, 'sidebar/sidebar.css'), 'utf-8');
+      var sidebarJs   = fs.readFileSync(path.join(ROOT_DIR, 'sidebar/sidebar.js'), 'utf-8');
 
             var inlineHtml =
         "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><style>" + sidebarCss + "</style></head>" +
