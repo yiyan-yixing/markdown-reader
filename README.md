@@ -64,26 +64,37 @@ A Chrome extension that renders `.md` files in a beautiful three-panel reading i
 
 > 🚧 即将上架，敬请期待
 
-### Developer Mode（本地安装）
+### From Release ZIP（从发布包安装）
 
-1. Clone 或下载本项目
-   ```bash
-   git clone https://github.com/yiyan-yixing/markdown-reader.git
-   ```
-2. 打开 Chrome → 地址栏输入 `chrome://extensions`
-3. 右上角开启 **开发者模式**
-4. 点击 **加载已解压的扩展程序**
-5. 选择 `markdown-reader/` 目录
-6. 完成！打开任意 `.md` 文件即可使用
+> 无需安装 Git，适合直接下载。
+
+1. 前往 [Releases 页面](https://github.com/yiyan-yixing/markdown-reader/releases)
+2. 下载最新版本的 `markdown-reader-v*.zip`
+3. 解压到本地文件夹（如 `markdown-reader/`）
+4. 打开 Chrome → 地址栏输入 `chrome://extensions`
+5. 右上角开启 **开发者模式**
+6. 点击 **加载已解压的扩展程序**
+7. 选择刚才解压的文件夹
+8. 完成！打开任意 `.md` 文件即可使用
+
+### From Source（从源码安装）
+
+```bash
+# 克隆仓库
+git clone https://github.com/yiyan-yixing/markdown-reader.git
+cd markdown-reader
+
+# 可选：运行测试
+bash run-tests.sh
+
+# 打开 Chrome → chrome://extensions
+# 开启"开发者模式"→"加载已解压的扩展程序"
+# 选择 markdown-reader/ 目录
+```
 
 ### Edge 本地安装
 
-1. Clone 或下载本项目
-2. 打开 Edge → 地址栏输入 `edge://extensions`
-3. 左下角开启 **开发人员模式**
-4. 点击 **加载解压缩的扩展**
-5. 选择 `markdown-reader/` 目录
-6. 完成！
+同上，地址栏输入 `edge://extensions`，开启 **开发人员模式**，加载解压缩的扩展。
 
 ### 验证安装
 
