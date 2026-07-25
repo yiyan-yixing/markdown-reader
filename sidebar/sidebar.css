@@ -49,6 +49,30 @@ body {
   border-color: #22c55e;
 }
 
+.sidebar-search-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.sidebar-search-status .count {
+  color: #22c55e;
+  font-weight: 500;
+}
+
+.sidebar-search-status .no-match {
+  color: #ef4444;
+}
+
+.sidebar-search-status .hint {
+  color: #9ca3af;
+  font-style: italic;
+}
+
 .sidebar-tree {
   flex: 1;
   overflow-y: auto;

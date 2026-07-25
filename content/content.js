@@ -175,11 +175,71 @@
     });
   }
 
-  // ── Current file path / URL info ──
-  function getCurrentFileInfo() {
-    const url = window.location.href;
-    const filename = url.split('/').pop()?.split('?')[0] || 'README.md';
-    const dir = url.substring(0, url.lastIndexOf('/'));
+  // ── Navigate to another file without page reload (fetch content + swap reader) ──
+  async function navigateToFile(filePath) {
+    try {
+      let rawMarkdown;
+
+      if (filePath.startsWith('file://')) {
+        // Local file — fetch directly (we have file:// permission now)
+        const resp = await fetch(filePath);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        rawMarkdown = await resp.text();
+      } else {
+        // Remote markdown — use background SW for CORS
+        rawMarkdown = await fetchRawMarkdown(filePath);
+      }
+
+      if (!rawMarkdown || !looksLikeMarkdown(rawMarkdown)) {
+        throw new Error('Not valid markdown');
+      }
+
+      // Update reader state URL (used by getCurrentFileInfo / buildFileTree)
+      _readerFileUrl = filePath;
+      window.history.replaceState({}, '', filePath);
+
+      // Update toolbar filename
+      const newFilename = safeDecode(filePath.split('/').pop()?.split('?')[0] || '');
+      const filenameEl = document.querySelector('.md-filename');
+      if (filenameEl) {
+        filenameEl.textContent = newFilename;
+        filenameEl.title = filePath;
+      }
+
+      // Re-render content
+      const contentInner = document.querySelector('.md-content-inner');
+      if (contentInner) {
+        contentInner.innerHTML = renderMarkdown(rawMarkdown);
+        buildOutline(contentInner);
+        addCopyButtons();
+        // Re-apply settings like custom CSS
+        applySettings();
+        // Reset scroll to top
+        document.querySelector('.md-content')?.scrollTo({ top: 0, behavior: 'instant' });
+      }
+
+      // Rebuild file tree for the new file's directory
+      buildFileTree();
+
+    } catch (_) {
+      // Fallback: full page navigation
+      window.location.href = filePath;
+    }
+  }
+
+  // ── Safely decode URI component, fallback on invalid encoding ──
+  function safeDecode(str) {
+    try { return decodeURIComponent(str); } catch (e) { return str; }
+  }
+
+  // ── Current file path / URL info (optional override for in-page navigation) ──
+  let _readerFileUrl = null;
+
+  function getCurrentFileInfo(overrideUrl) {
+    const url = overrideUrl || _readerFileUrl || window.location.href;
+    const rawFilename = url.split('/').pop()?.split('?')[0] || 'README.md';
+    const filename = safeDecode(rawFilename);
+    const dir = safeDecode(url.substring(0, url.lastIndexOf('/')));
     const isLocal = url.startsWith('file://');
     const isGitHub = window.location.hostname === 'github.com';
     const isGitLab = window.location.hostname === 'gitlab.com'
@@ -337,59 +397,62 @@
     return raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
   }
 
-  // ── Build TOC from rendered headings ──
-  function buildOutline(container) {
-    const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
-    const outline = document.getElementById('md-outline');
-    if (!outline) return;
+// ── Build TOC from rendered headings ──
+function buildOutline(container) {
+  const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  const outline = document.getElementById('md-outline');
+  if (!outline) return;
 
-    outline.innerHTML = '';
-    if (headings.length === 0) {
-      outline.innerHTML = '<div class="md-outline-empty">No headings found</div>';
-      return;
-    }
-
-    const ul = document.createElement('ul');
-    ul.className = 'md-outline-list';
-
-    headings.forEach((h, i) => {
-      const id = 'md-heading-' + i;
-      h.id = id;
-
-      // Extract heading text BEFORE inserting anchor (avoid # leaking into outline)
-      const headingText = h.textContent;
-
-      // Add heading anchor (#) link — hidden until hover (inspired by md-reader)
-      const anchor = document.createElement('a');
-      anchor.className = 'md-heading-anchor';
-      anchor.href = '#' + id;
-      anchor.textContent = '#';
-      anchor.addEventListener('click', e => {
-        e.preventDefault();
-        const fullUrl = window.location.origin + window.location.pathname + '#' + id;
-        navigator.clipboard.writeText(fullUrl).catch(() => {});
-        h.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-      h.insertBefore(anchor, h.firstChild);
-
-      const li = document.createElement('li');
-      li.className = 'md-outline-item md-outline-h' + h.tagName[1];
-      li.dataset.targetId = id;
-      li.textContent = headingText;
-      li.addEventListener('click', () => {
-        const target = document.getElementById(id);
-        if (target) {
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      });
-      ul.appendChild(li);
-    });
-
-    outline.appendChild(ul);
-    setupScrollTracking(headings);
+  outline.innerHTML = '';
+  if (headings.length === 0) {
+    outline.innerHTML = '<div class="md-outline-empty">No headings found</div>';
+    return;
   }
 
-  // ── Scroll tracking → highlight current TOC item ──
+  const ul = document.createElement('ul');
+  ul.className = 'md-outline-list';
+
+  headings.forEach((h, i) => {
+    const id = 'md-heading-' + i;
+    h.id = id;
+
+    // Extract heading text BEFORE inserting anchor (avoid # leaking into outline)
+    const headingText = h.textContent;
+
+    // Add heading anchor (#) link — hidden until hover (inspired by md-reader)
+    const anchor = document.createElement('a');
+    anchor.className = 'md-heading-anchor';
+    anchor.href = '#' + id;
+    anchor.textContent = '#';
+    anchor.addEventListener('click', e => {
+      e.preventDefault();
+      const fullUrl = window.location.origin + window.location.pathname + '#' + id;
+      navigator.clipboard.writeText(fullUrl).catch(() => {});
+      h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    h.insertBefore(anchor, h.firstChild);
+
+    // Use HTML heading tag level (h1-h6) for outline hierarchy
+    const outlineLevel = parseInt(h.tagName[1]);
+
+    const li = document.createElement('li');
+    li.className = 'md-outline-item md-outline-h' + outlineLevel;
+    li.dataset.targetId = id;
+    li.innerHTML = `<span class="md-outline-text">${headingText}</span>`;
+    li.addEventListener('click', () => {
+      const target = document.getElementById(id);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+    ul.appendChild(li);
+  });
+
+  outline.appendChild(ul);
+  setupScrollTracking(headings);
+}
+
+  // ── Scroll tracking → highlight current TOC item + auto-scroll outline ──
   let scrollObserver = null;
   function setupScrollTracking(headings) {
     if (scrollObserver) scrollObserver.disconnect();
@@ -401,14 +464,19 @@
       entries.forEach(entry => {
         const id = entry.target.id;
         const tocItem = document.querySelector(`.md-outline-item[data-target-id="${id}"]`);
-        if (tocItem && entry.isIntersecting) {
+        if (!tocItem) return;
+
+        if (entry.isIntersecting) {
+          // Remove active from all, then set this one
           document.querySelectorAll('.md-outline-item.active').forEach(el => el.classList.remove('active'));
           tocItem.classList.add('active');
+          // Auto-scroll outline to keep active item visible
+          tocItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
       });
     }, {
       root: contentArea,
-      rootMargin: '-10% 0px -80% 0px',
+      rootMargin: '-15% 0px -35% 0px',
       threshold: 0
     });
 
@@ -437,15 +505,24 @@
     allSidebarsHidden = !allSidebarsHidden;
     const tree = document.querySelector('.md-sidebar-tree');
     const outline = document.querySelector('.md-sidebar-outline');
+    const toggleBtn = document.querySelector('[data-action="toggle-all-sidebars"]');
 
     if (allSidebarsHidden) {
       // Hide both
       tree?.classList.add('md-collapsed');
       outline?.classList.add('md-collapsed');
+      if (toggleBtn) {
+        toggleBtn.innerHTML = ICONS.collapse;
+        toggleBtn.title = 'Show All Sidebars';
+      }
     } else {
       // Restore previous state
       tree?.classList.toggle('md-collapsed', !settings.showFileTree);
       outline?.classList.toggle('md-collapsed', !settings.showOutline);
+      if (toggleBtn) {
+        toggleBtn.innerHTML = ICONS.expand;
+        toggleBtn.title = 'Hide All Sidebars';
+      }
     }
   }
 
@@ -470,6 +547,95 @@
 
     handleResize();
     window.addEventListener('resize', handleResize);
+  }
+
+  // ── File tree marquee hover — scroll long filenames on hover ──
+  function setupFileTreeMarquee() {
+    const tree = document.querySelector('.md-tree-container');
+    if (!tree) return;
+
+    let marqueeTimer = null;
+
+    tree.addEventListener('mouseover', e => {
+      const nameEl = e.target.closest('.md-tree-item')?.querySelector('.md-tree-name');
+      if (!nameEl) return;
+
+      clearTimeout(marqueeTimer);
+      marqueeTimer = setTimeout(() => {
+        const textEl = nameEl.querySelector('.md-tree-text');
+        if (!textEl) return;
+        if (textEl.scrollWidth > nameEl.clientWidth) {
+          const dist = textEl.scrollWidth - nameEl.clientWidth + 10;
+          const dur = Math.max(2, dist / 40);
+          textEl.style.setProperty('--marquee-dist', -dist + 'px');
+          textEl.style.setProperty('--marquee-dur', dur + 's');
+          nameEl.classList.add('marquee');
+        }
+      }, 400); // 400ms delay before starting scroll
+    });
+
+    tree.addEventListener('mouseout', e => {
+      const item = e.target.closest('.md-tree-item');
+      if (!item) return;
+      // Only stop when actually leaving the tree item (not moving between children)
+      const related = e.relatedTarget;
+      if (related && item.contains(related)) return;
+      const nameEl = item.querySelector('.md-tree-name');
+      if (nameEl) nameEl.classList.remove('marquee');
+    });
+  }
+
+  // ── Outline marquee hover — scroll long headings on hover ──
+  function setupOutlineMarquee() {
+    const container = document.querySelector('.md-outline-container');
+    if (!container) return;
+
+    // Use MutationObserver to attach marquee to both existing and future items
+    function attachMarquee(item) {
+      if (item._marqueeAttached) return;
+      item._marqueeAttached = true;
+
+      const textEl = item.querySelector('.md-outline-text');
+      if (!textEl) return;
+
+      let timer = null;
+
+      item.addEventListener('mouseenter', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          // Account for item padding — clientWidth includes padding, but text
+          // lives in the content area inside it.
+          const style = getComputedStyle(item);
+          const hPad = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+          const contentWidth = item.clientWidth - hPad;
+          const overflow = textEl.scrollWidth - contentWidth;
+          if (overflow > 0) {
+            const dist = overflow + 10;
+            const dur = Math.max(2, dist / 40);
+            textEl.style.setProperty('--marquee-dist', -dist + 'px');
+            textEl.style.setProperty('--marquee-dur', dur + 's');
+            item.classList.add('marquee');
+          }
+        }, 400);
+      });
+
+      item.addEventListener('mouseleave', () => {
+        clearTimeout(timer);
+        item.classList.remove('marquee');
+      });
+    }
+
+    // Attach to all existing items
+    container.querySelectorAll('.md-outline-item').forEach(attachMarquee);
+
+    // Watch for new items added dynamically (e.g., navigateToFile rebuilds outline)
+    const observer = new MutationObserver(() => {
+      container.querySelectorAll('.md-outline-item:not([data-mq="1"])').forEach(item => {
+        item.dataset.mq = '1';
+        attachMarquee(item);
+      });
+    });
+    observer.observe(container, { childList: true, subtree: true });
   }
 
   function toggleMobileSidebar(sidebar) {
@@ -599,39 +765,220 @@
     const treeContainer = document.getElementById('md-file-tree');
     if (!treeContainer) return;
 
-    const { dir, filename, isLocal, isGitHub, isGitLab, repoDir } = getCurrentFileInfo();
-
-    const currentFile = document.createElement('div');
-    currentFile.className = 'md-tree-item md-tree-file md-tree-active';
-    currentFile.innerHTML = `<span class="md-tree-icon">📄</span> ${filename}`;
+    const fileInfo = getCurrentFileInfo();
     treeContainer.innerHTML = '';
-    treeContainer.appendChild(currentFile);
 
-    if (isGitHub && repoDir) {
-      const repoItem = document.createElement('div');
-      repoItem.className = 'md-tree-item md-tree-dir';
-      const repoName = repoDir.replace('https://github.com/', '');
-      repoItem.innerHTML = `<span class="md-tree-icon">📁</span> ${repoName}`;
-      repoItem.addEventListener('click', () => {
-        window.open(repoDir, '_blank');
-      });
-      treeContainer.appendChild(repoItem);
-
-      const hint = document.createElement('div');
-      hint.className = 'md-tree-hint';
-      hint.innerHTML = '<small>💡 Click the folder icon in toolbar to open file browser in side panel</small>';
-      treeContainer.appendChild(hint);
-    } else if (isLocal) {
-      const hint = document.createElement('div');
-      hint.className = 'md-tree-hint';
-      hint.innerHTML = '<small>📂 Local file mode — use side panel to browse directory</small>';
-      treeContainer.appendChild(hint);
+    if (fileInfo.isGitHub && fileInfo.repoDir) {
+      buildGitHubFileTree(treeContainer, fileInfo);
     } else {
-      const hint = document.createElement('div');
-      hint.className = 'md-tree-hint';
-      hint.innerHTML = '<small>💡 Use the folder icon in toolbar to open file browser</small>';
-      treeContainer.appendChild(hint);
+      buildSimpleFileTree(treeContainer, fileInfo);
     }
+  }
+
+  // ── Enumerate local directory — try direct fetch first, fallback to hidden tab ──
+  async function enumerateLocalDirectory(dirPath) {
+    // Method 1: try to fetch the directory URL directly (works with file:///* permission)
+    try {
+      const response = await fetch(dirPath + '/');
+      const html = await response.text();
+      const parsed = parseDirListing(html, dirPath);
+      if (parsed && parsed.length > 0) {
+        const container = document.getElementById('md-file-tree');
+        if (container) renderDirListing(container, parsed, getCurrentFileInfo());
+        return;
+      }
+    } catch (_) {}
+
+    // Method 2: ask background SW to use a hidden tab
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
+      chrome.runtime.sendMessage({ type: 'enumerateDirectory', url: dirPath }, () => {});
+    }
+  }
+
+  // ── Extract filename from a path (handle full paths or relative) ──
+  function basename(p) {
+    return p.replace(/\/+$/, '').split('/').pop() || p;
+  }
+
+  // ── Parse directory listing HTML into file objects ──
+  function parseDirListing(html, dirPath) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    const links = div.querySelectorAll('a');
+    const files = [];
+    const seen = new Set();
+    links.forEach(link => {
+      const href = link.getAttribute('href');
+      if (!href || href.startsWith('?') || href.startsWith('#')) return;
+      const name = basename(href);
+      if (name === '..' || name === '.' || name === '' || seen.has(name)) return;
+      seen.add(name);
+      const filePath = href.startsWith('/') ? 'file://' + href : dirPath + '/' + href;
+      files.push({
+        name: safeDecode(name),
+        path: filePath,
+        type: href.endsWith('/') ? 'dir' : 'file',
+      });
+    });
+    return files.length > 0 ? files : null;
+  }
+
+  // ── Render file list into tree container ──
+  function renderDirListing(container, files, fileInfo) {
+    const currentFilename = fileInfo.filename;
+    const dirPath = fileInfo.dir;
+    const header = container.querySelector('.md-tree-item:first-child');
+    container.innerHTML = '';
+    if (header) container.appendChild(header.cloneNode(true));
+
+    // Resolve paths: handle absolute (/...), relative (file.md), or already full
+    const resolved = files.map(f => {
+      let fullPath = f.path;
+      if (!fullPath.startsWith('file://') && !fullPath.startsWith('http://') && !fullPath.startsWith('https://')) {
+        if (fullPath.startsWith('/')) {
+          fullPath = 'file://' + fullPath;
+        } else {
+          fullPath = dirPath + '/' + fullPath;
+        }
+      }
+      return { ...f, path: fullPath };
+    });
+
+    // Sort: dirs first, then files, alphabetically
+    const sorted = [
+      ...resolved.filter(f => f.type === 'dir').sort((a, b) => a.name.localeCompare(b.name)),
+      ...resolved.filter(f => f.type === 'file').sort((a, b) => a.name.localeCompare(b.name)),
+    ];
+
+    sorted.forEach(item => {
+      const el = document.createElement('div');
+      const isCurrent = item.name === currentFilename;
+      const isMd = item.type === 'file' && (item.name.endsWith('.md') || item.name.endsWith('.markdown'));
+      let cls = 'md-tree-item';
+      if (isCurrent) cls += ' md-tree-active';
+      else if (item.type === 'file' && !isMd) cls += ' md-tree-nonmd';
+      el.className = cls;
+
+      if (item.type === 'dir') {
+        el.innerHTML = `<span class="md-tree-icon">📁</span><span class="md-tree-name"><span class="md-tree-text">${item.name}/</span></span>`;
+        el.addEventListener('click', e => { e.stopPropagation(); window.location.href = item.path; });
+      } else {
+        el.innerHTML = `<span class="md-tree-icon">${isMd ? '📄' : '📎'}</span><span class="md-tree-name"><span class="md-tree-text">${item.name}</span></span>`;
+        if (isMd && !isCurrent) {
+          el.addEventListener('click', e => {
+            e.stopPropagation();
+            navigateToFile(item.path);
+          });
+        }
+      }
+      container.appendChild(el);
+    });
+  }
+
+  // ── Simple file tree (non-GitHub pages) ──
+  function buildSimpleFileTree(container, fileInfo) {
+    // Directory header
+    const dirName = fileInfo.dir.split('/').pop() || '/';
+    const dirLabel = document.createElement('div');
+    dirLabel.className = 'md-tree-item';
+    dirLabel.style.cssText = 'font-size:11px;font-weight:600;color:var(--md-text-muted);padding:6px 14px;text-transform:uppercase;letter-spacing:0.3px;border-bottom:1px solid var(--md-sidebar-border);margin-bottom:2px;cursor:default;';
+    dirLabel.textContent = `📁 ${dirName}`;
+    container.appendChild(dirLabel);
+
+    // Loading state while enumerating directory
+    const loading = document.createElement('div');
+    loading.className = 'md-tree-loading';
+    loading.textContent = '⏳ Loading files…';
+    container.appendChild(loading);
+
+    // Current file (highlighted, shown immediately)
+    const currentFile = document.createElement('div');
+    currentFile.className = 'md-tree-item md-tree-active';
+    currentFile.innerHTML = `<span class="md-tree-icon">📄</span><span class="md-tree-name"><span class="md-tree-text">${fileInfo.filename}</span></span>`;
+    container.appendChild(currentFile);
+
+    // Try to list local directory contents via background SW (hidden tab)
+    enumerateLocalDirectory(fileInfo.dir);
+  }
+
+  // ── GitHub file tree via GitHub Contents API ──
+  function buildGitHubFileTree(container, fileInfo) {
+    // Parse: https://github.com/owner/repo/blob/branch/path/to/file.md
+    const match = fileInfo.url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)/);
+    if (!match) { buildSimpleFileTree(container, fileInfo); return; }
+
+    const owner = match[1];
+    const repo = match[2];
+    const branch = match[3];
+    const filePath = match[4];
+    const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+
+    // Loading state
+    container.innerHTML = '<div class="md-tree-loading">⏳ Loading files…</div>';
+
+    // Fetch directory from GitHub Contents API (supports CORS)
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${dirPath}?ref=${encodeURIComponent(branch)}`;
+
+    fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github.v3+json' } })
+      .then(r => { if (!r.ok) throw new Error('API error'); return r.json(); })
+      .then(items => {
+        if (!Array.isArray(items)) throw new Error('Not a directory');
+        container.innerHTML = '';
+
+        // Directory header
+        const dirLabel = document.createElement('div');
+        dirLabel.className = 'md-tree-item';
+        dirLabel.style.cssText = 'font-size:11px;font-weight:600;color:var(--md-text-muted);padding:6px 14px;text-transform:uppercase;letter-spacing:0.3px;border-bottom:1px solid var(--md-sidebar-border);margin-bottom:2px;cursor:default;';
+        dirLabel.textContent = `📁 ${dirPath || '/'}`;
+        container.appendChild(dirLabel);
+
+        // Parent directory
+        if (dirPath) {
+          const parentPath = dirPath.includes('/') ? dirPath.substring(0, dirPath.lastIndexOf('/')) : '';
+          const parentUrl = `https://github.com/${owner}/${repo}/tree/${branch}/${parentPath}`;
+          const parentItem = document.createElement('div');
+          parentItem.className = 'md-tree-item';
+          parentItem.innerHTML = '<span class="md-tree-icon">📁</span> ..';
+          parentItem.addEventListener('click', () => { window.location.href = parentUrl; });
+          container.appendChild(parentItem);
+        }
+
+        // Sort: dirs first, then files
+        const sorted = [
+          ...items.filter(i => i.type === 'dir').sort((a, b) => a.name.localeCompare(b.name)),
+          ...items.filter(i => i.type === 'file').sort((a, b) => a.name.localeCompare(b.name))
+        ];
+
+        sorted.forEach(item => {
+          const el = document.createElement('div');
+          const isCurrent = item.path === filePath;
+          let className = 'md-tree-item' + (isCurrent ? ' md-tree-active' : '');
+
+          if (item.type === 'dir') {
+            el.className = className;
+            el.innerHTML = `<span class="md-tree-icon">📁</span><span class="md-tree-name"><span class="md-tree-text">${item.name}</span></span>`;
+            el.addEventListener('click', () => {
+              window.location.href = `https://github.com/${owner}/${repo}/tree/${branch}/${item.path}`;
+            });
+          } else {
+            const isMd = item.name.endsWith('.md') || item.name.endsWith('.markdown');
+            if (!isMd) className += ' md-tree-nonmd';
+            el.className = className;
+            el.innerHTML = `<span class="md-tree-icon">${isMd ? '📄' : '📎'}</span><span class="md-tree-name"><span class="md-tree-text">${item.name}</span></span>`;
+            if (isMd && !isCurrent) {
+              el.addEventListener('click', () => {
+                window.location.href = `https://github.com/${owner}/${repo}/blob/${branch}/${item.path}`;
+              });
+            }
+          }
+          container.appendChild(el);
+        });
+      })
+      .catch(() => {
+        // Fallback
+        container.innerHTML = '';
+        buildSimpleFileTree(container, fileInfo);
+      });
   }
 
   // ── Settings panel (feature toggles from screenshot) ──
@@ -1002,6 +1349,16 @@
     document.body.innerHTML = '';
     document.body.appendChild(root);
 
+    // Update tab favicon to match extension icon (data URL to avoid chrome-extension:// restrictions)
+    const faviconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 128 128"><rect width="128" height="128" rx="30" fill="#607cd2"/><path d="M38 92V36l26 30 26-30v56" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    let link = document.querySelector('link[rel*="icon"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = 'data:image/svg+xml,' + encodeURIComponent(faviconSvg);
+
     // Build TOC
     const contentInner = document.querySelector('.md-content-inner');
     if (contentInner) {
@@ -1009,8 +1366,12 @@
       addCopyButtons();
     }
 
+    // Setup hover marquees for outline and file tree
+    setupOutlineMarquee();
+
     // Build file tree
     buildFileTree();
+    setupFileTreeMarquee();
 
     // Build settings panel
     buildSettingsPanel();
@@ -1177,7 +1538,7 @@
           sendResponse({ data: [] });
         }
         if (msg.type === 'navigateToFile' && msg.path) {
-          window.location.href = msg.path;
+          navigateToFile(msg.path);
         }
         if (msg.type === 'activateReader') {
           const fab = document.getElementById('md-reader-fab');
@@ -1193,6 +1554,14 @@
           } else {
             sendResponse({ type: 'none' });
           }
+        }
+        // Directory listing from background SW (hidden tab)
+        if (msg.type === 'directoryList') {
+          const container = document.getElementById('md-file-tree');
+          if (!container) return;
+          const files = msg.files;
+          if (!files || files.length === 0) return;
+          renderDirListing(container, files, getCurrentFileInfo());
         }
       });
     }

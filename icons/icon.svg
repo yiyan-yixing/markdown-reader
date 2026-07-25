@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <!-- Apple-style gradient: soft blue-purple -->
+    <linearGradient id="bgGrad" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#7f9cf5"/>
+      <stop offset="55%" stop-color="#607cd2"/>
+      <stop offset="100%" stop-color="#3d5094"/>
+    </linearGradient>
+
+    <!-- Top-left glass highlight -->
+    <radialGradient id="glow" cx="28%" cy="22%" r="65%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.25)"/>
+      <stop offset="60%" stop-color="rgba(255,255,255,0.06)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+
+    <!-- Bottom vignette for depth -->
+    <linearGradient id="vignette" x1="0%" y1="60%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(0,0,0,0)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.14)"/>
+    </linearGradient>
+
+    <!-- M shadow -->
+    <filter id="mShadow" x="-20%" y="-10%" width="140%" height="130%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#2d3d78" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="128" height="128" rx="30" fill="url(#bgGrad)"/>
+  <rect x="0" y="0" width="128" height="128" rx="30" fill="url(#glow)"/>
+  <rect x="0" y="0" width="128" height="128" rx="30" fill="url(#vignette)"/>
+
+  <!-- Bold white Markdown M -->
+  <g filter="url(#mShadow)">
+    <path d="M38 92V36l26 30 26-30v56" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -28,14 +28,7 @@ body {
 .popup-logo {
   width: 36px;
   height: 36px;
-  background: #1e293b;
-  color: #e9c46a;
   border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  font-weight: 700;
   flex-shrink: 0;
 }
 

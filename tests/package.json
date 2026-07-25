@@ -1,0 +1,12 @@
+{
+  "name": "markdown-reader-e2e-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "E2E test suite for Markdown Reader Chrome extension",
+  "scripts": {
+    "test": "node markdown-reader.test.js"
+  },
+  "dependencies": {
+    "playwright": "^1.62.0"
+  }
+}
