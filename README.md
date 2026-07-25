@@ -56,9 +56,9 @@ A Chrome extension that renders `.md` files in a beautiful three-panel reading i
 
 ## 🚀 Install
 
-### Chrome Web Store（推荐）
+### Chrome Web Store
 
-> 🚧 即将上架，敬请期待
+> 🚧 即将上架 — 发布流程参考[发布指南](../../vault/03-resources/chrome-webstore-publish-guide.md)
 
 ### Edge Add-ons
 
