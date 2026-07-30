@@ -2,12 +2,17 @@
   "manifest_version": 3,
   "name": "Markdown Reader",
   "version": "1.0.0",
-  "description": "Beautiful Markdown reader with outline, file tree, themes and more. Intercepts .md URLs and GitHub/GitLab blob pages.",
+  "description": "Beautiful Markdown reader with outline, file tree, themes, AI translation & summarization (bring your own model). Intercepts .md URLs and GitHub/GitLab blob pages.",
   "permissions": [
     "activeTab",
     "storage",
     "sidePanel",
-    "scripting"
+    "scripting",
+    "declarativeNetRequest"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ],
   "host_permissions": [
     "https://raw.githubusercontent.com/*",
@@ -53,7 +58,8 @@
         "content/content.css",
         "styles/reader.css",
         "styles/themes/dark.css",
-        "styles/themes/light.css"
+        "styles/themes/light.css",
+        "styles/ai.css"
       ],
       "run_at": "document_idle"
     }

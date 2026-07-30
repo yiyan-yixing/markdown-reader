@@ -63,14 +63,15 @@ The popup's "Open in Markdown Reader" button sends `activateReader` message to s
 
 | File | Role |
 |------|------|
-| `manifest.json` | MV3 config: content_script matches, host_permissions, sidePanel, action popup |
-| `content/content.js` | Main content script (~1300 lines) — page detection, reader UI, search, theme, settings |
-| `background/service-worker.js` | Message router: `fetchRaw` (CORS bypass), `requestFileTree`, `navigateToFile`, `settingsUpdated`, `openSidePanel` |
+| `manifest.json` | MV3 config: content_script matches, host_permissions, optional_host_permissions (for BYO LLM endpoints), sidePanel, action popup |
+| `content/content.js` | Main content script — page detection, reader UI, search, theme, settings, AI assistant (selection translate/summarize + result panel, not-configured banner, toolbar 🤖 config button, `reconcileAIConfig`) |
+| `background/service-worker.js` | Message router: `fetchRaw` (CORS bypass), `requestFileTree`, `navigateToFile`, `settingsUpdated`, `openSidePanel`, **+ streaming LLM proxy over Port `md-reader-llm`** |
 | `sidebar/sidebar.js` | Chrome side panel file browser with tree view and search with keyboard navigation |
 | `sidebar/sidebar.html` | Chrome side panel HTML shell |
-| `popup/popup.js` | Extension popup: settings toggles, theme picker, tab state detection, "Activate Reader" button |
+| `popup/popup.js` | Extension popup: settings toggles, theme picker, tab state detection, "Activate Reader" button, AI config (vendor presets, provider/baseUrl/key/model) + test-connection |
 | `popup/popup.html` | Popup UI (340px width) |
 | `styles/reader.css` | Main reader styles with CSS variable theming (light + dark via `[data-theme]`) |
+| `styles/ai.css` | AI assistant styles — selection popover + streaming result panel (themed via `--md-*`) |
 | `styles/themes/light.css` | Light theme overrides |
 | `styles/themes/dark.css` | Dark theme overrides |
 | `lib/marked.min.js` | Markdown parser (marked.js) |
@@ -78,11 +79,11 @@ The popup's "Open in Markdown Reader" button sends `activateReader` message to s
 | `lib/hljs-{light,dark}.css` | Code theme styles |
 | `preview.html` | Standalone test page (no Chrome needed — fakes `<pre>` for content.js) |
 | `sample.md` | Demo markdown file used by tests |
-| `tests/markdown-reader.test.js` | Playwright E2E tests (15 test cases) |
+| `tests/markdown-reader.test.js` | Playwright E2E tests (21 test cases) |
 
 ### Message Protocol
 
-All messages passed via `chrome.runtime.sendMessage` / `chrome.tabs.sendMessage`:
+All messages passed via `chrome.runtime.sendMessage` / `chrome.tabs.sendMessage` (except the LLM proxy, which uses a long-lived Port):
 
 | Type | Sender → Receiver | Purpose |
 |------|-------------------|---------|
@@ -94,6 +95,10 @@ All messages passed via `chrome.runtime.sendMessage` / `chrome.tabs.sendMessage`
 | `activateReader` | popup → content | Click the floating reader button |
 | `getPageType` | popup → content | Returns `reader-active`, `rendered-page`, or `none` |
 | `openSidePanel` | content → background | Open Chrome side panel |
+| `aiCheckConfig` | content → background | Asks SW whether an AI key exists; SW replies `{configured}` (boolean) — SW is the single source of truth for "configured", the key value never enters content |
+| `openAIConfig` | content → background | Open `popup.html?standalone=1` as a tab (an extension page where `chrome.permissions.request` works); SW records the source reading tab id |
+| `aiConfigDone` | popup(config page) → background | "完成，返回阅读": close the config tab and focus the reading tab that opened it (`aiConfigSourceTabId`) |
+| `md-reader-llm` (Port) | content/popup → background | Streaming LLM proxy — `aiComplete` `{provider, baseUrl, model, messages}`, replies `{type:'chunk'|'done'|'error'}` |
 
 ### Testing
 
@@ -101,12 +106,27 @@ E2E tests use Playwright with mocked `chrome.*` APIs injected via `page.addInitS
 
 - Inject content script + deps (marked, highlight.js) into a fresh page
 - Serve markdown via a local HTTP server wrapping `<pre>` tags
-- 15 tests covering: reader UI, file tree, TOC, search, keyboard nav, copy buttons, theme toggle, font size, settings panel, popup UI, sidebar UI, sidebar search + keyboard, sidebar collapse/expand, narrow mode, rendered features
+- 21 tests covering: reader UI, file tree, TOC, search, keyboard nav, copy buttons, theme toggle, font size, settings panel, popup UI, sidebar UI, sidebar search + keyboard, sidebar collapse/expand, narrow mode, rendered features, **AI summarize-all, AI selection translate, AI not-configured hint (actionable button), popup vendor preset autofill, not-configured banner + toolbar config button, single-word dictionary translate prompt**
 - Failed tests save screenshots to `tests/screenshots/`
+
+### AI Assistant (BYO model)
+
+Bring-your-own-model translate + summarize. User configures Provider (OpenAI-compatible `/chat/completions` or Anthropic `/v1/messages`), Base URL, model name, target language, and an API key in the popup.
+
+- **API key** is stored in `chrome.storage.local` (`mdReaderApiKey`) — it is **never** placed in the synced settings or sent to the content script. Only the background service worker reads it, then calls the provider directly.
+- **"Configured" is derived, not stored-as-truth:** content never trusts the `configured` boolean blindly. On mount and on every `settingsUpdated`, it asks the SW (`aiCheckConfig`) whether a key exists and the SW answers with a bare boolean (the key value never reaches content). The popup also flips `configured` on load + on the test-connection click. This keeps the reader from falsely showing "未配置" after a key is saved.
+- Non-secret AI config lives under `settings.ai` (`vendor`, `provider`, `baseUrl`, `model`, `targetLang`, `enableTranslate`, `enableSummary`, `configured`).
+- **Vendor presets:** the popup's 服务商 dropdown (`AI_VENDORS` in `popup/popup.js`) auto-fills protocol + Base URL + model hint for OpenAI, DeepSeek, 智谱 GLM, Kimi, 通义千问, local Ollama, and Anthropic; a 自定义 option leaves the fields blank for manual entry. Editing the Base URL to a value that no longer matches a preset flips it back to 自定义.
+- Host access to the configured endpoint is granted at runtime via `optional_host_permissions` + `chrome.permissions.request` (must originate from an extension page with a user gesture). The background SW does the fetch (bypasses CORS).
+- **Local endpoints (Ollama etc.):** local LLM servers reject `chrome-extension://` origins with HTTP 403. At SW startup `setupLocalLLMHeaderRules()` registers a `declarativeNetRequest` session rule (id `1001`) that strips the `Origin` header from this extension's requests to `localhost` / `127.0.0.1` / `0.0.0.0`, so the server falls back to Host-based trust (like curl) — users pick「本地 Ollama」and it just works, no `OLLAMA_ORIGINS` needed. Requires the `declarativeNetRequest` permission. If a local call still returns 403, the SW appends an `OLLAMA_ORIGINS` hint to the error (degradation fallback).
+- **Triggers:** select text → floating popover (🌐 翻译 / 📝 总结); toolbar `✨` button → summarize whole document (`>12000` chars truncated). Output streams into a fixed result panel (typewriter while streaming, markdown-rendered on completion, with copy).
+- **Prompts** (`aiBuildMessages(task, text, mode)` in `content.js`): translate auto-detects a single English word (`aiIsSingleWord`) and switches to a **dictionary entry** — 🇬🇧/🇪🇸 IPA, parts of speech + senses, synonyms, antonyms, and example sentences (in `targetLang`); phrases/sentences use plain translation. Summarize splits by `mode`: `'all'` (toolbar ✨) → structured Overview / Key points / Conclusions / Action items; `'selection'` → 3–5 focused bullets.
+- **Discoverable config:** when no key is set, the reader shows a dismissible `#md-ai-banner` at the top of the content, the selection popover shows a `⚙️ 配置模型` button, and the not-configured result panel shows a `⚙️ 立即配置模型` button. A toolbar `🤖` button (`data-action="ai-config"`) is always available. Any of these send `openAIConfig` → the SW opens `popup.html?standalone=1` as a tab (a real extension page, so the host-permission request works there); `popup.css`'s `body.standalone` rules center it and highlight the AI section, and a "完成，返回阅读" button closes the tab.
+- All LLM traffic flows over the `md-reader-llm` Port (see Message Protocol).
 
 ### Settings
 
-Persisted via `chrome.storage.sync` key `mdReaderSettings`. Dual UI: popup toggles + in-page settings panel (toggled via toolbar gear icon). Settings include theme (`light`/`dark`/`auto`), fontSize, contentWidth, centerContent, showOutline, showFileTree, autoRefresh, customCSS, allPlugins.
+Persisted via `chrome.storage.sync` key `mdReaderSettings` (the API key is the exception — see AI Assistant). Dual UI: popup toggles + in-page settings panel (toggled via toolbar gear icon). Settings include theme (`light`/`dark`/`auto`), fontSize, contentWidth, centerContent, showOutline, showFileTree, autoRefresh, customCSS, allPlugins, and the nested `ai` block.
 
 ### Styling Convention
 

@@ -20,6 +20,12 @@
  *   [13] Sidebar tree directory collapse/expand
  *   [14] Responsive narrow-mode sidebar toggle
  *   [15] Rendered markdown features (tables, lists, quotes, code)
+ *   [16] AI summarize-all streams into result panel
+ *   [17] AI selection popover → translate
+ *   [18] AI not configured shows hint
+ *   [19] Popup AI vendor preset auto-fills config
+ *   [20] Not-configured shows banner + toolbar config button
+ *   [21] Single-word translate uses dictionary prompt
  *
  *  Every failure saves a screenshot to tests/screenshots/.
  * ========================================================================== */
@@ -115,7 +121,9 @@ function stopServer() {
 
 // -- Chrome API mock (runs in page context) ---------------------------------
 
-function makeChromeMock() {
+function makeChromeMock(settings) {
+  // settings: optional mdReaderSettings object returned by chrome.storage.sync.get
+  var stored = settings ? JSON.stringify(settings) : '{}';
   // Returns source string for addInitScript
   return [
     'window.chrome = window.chrome || {};',
@@ -123,16 +131,59 @@ function makeChromeMock() {
     '  id: "mock-ext-id",',
     '  getManifest: function() { return { version: "1.0.0" }; },',
     '  getURL: function(p) { return "chrome-extension://mock-ext-id/" + p; },',
-    '  sendMessage: function() {},',
+    '  sendMessage: function(msg, cb) {',
+    '    if (msg && msg.type === "aiCheckConfig") {',
+    '      // SW is the source of truth: answer from the mock flag (default true).',
+    '      var c = window.__mdAiMockConfigured !== undefined ? window.__mdAiMockConfigured : true;',
+    '      if (cb) setTimeout(function() { cb({ configured: c }); }, 0);',
+    '    } else if (msg && msg.type === "openAIConfig") {',
+    '      window.__mdAiOpenConfigCalled = true;',
+    '      if (cb) setTimeout(function() { cb({}); }, 0);',
+    '    }',
+    '  },',
     '  onMessage: { addListener: function() {}, removeListener: function() {} },',
+    '  connect: function(info) {',
+    '    var msgListeners = [], discListeners = [];',
+    '    var port = {',
+    '      name: (info && info.name) || "",',
+    '      onMessage: { addListener: function(fn) { msgListeners.push(fn); } },',
+    '      onDisconnect: { addListener: function(fn) { discListeners.push(fn); } },',
+    '      postMessage: function(msg) {',
+    '        if (msg && msg.type === "aiComplete") {',
+    '          window.__mdLastAiMsg = msg; // capture for prompt assertions',
+    '          var ok = window.__mdAiMockOk !== false;',
+    '          setTimeout(function() {',
+    '            if (ok) {',
+    '              msgListeners.forEach(function(fn) { fn({ type: "chunk", text: "这是一个模拟结果（test）。\\n- 要点一\\n- 要点二" }); });',
+    '              msgListeners.forEach(function(fn) { fn({ type: "done" }); });',
+    '            } else {',
+    '              msgListeners.forEach(function(fn) { fn({ type: "error", error: "模拟调用失败" }); });',
+    '            }',
+    '          }, 5);',
+    '        }',
+    '      },',
+    '      disconnect: function() {}',
+    '    };',
+    '    window.__mdLastAiPort = port;',
+    '    return port;',
+    '  },',
     '};',
     'window.chrome.storage = window.chrome.storage || {',
     '  sync: {',
-    '    get: function(keys, cb) { if (cb) setTimeout(function() { cb({ mdReaderSettings: {} }); }, 0); },',
+    '    get: function(keys, cb) { if (cb) setTimeout(function() { cb({ mdReaderSettings: ' + stored + ' }); }, 0); },',
     '    set: function() {},',
     '    remove: function() {},',
     '    clear: function() {},',
     '  },',
+    '  local: {',
+    '    _d: {},',
+    '    get: function(k, cb) { var r = {}; if (typeof k === "string") r[k] = this._d[k]; else r = Object.assign({}, this._d); if (cb) setTimeout(function() { cb(r); }, 0); },',
+    '    set: function(obj, cb) { Object.assign(this._d, obj); if (cb) setTimeout(cb, 0); },',
+    '  },',
+    '};',
+    'window.chrome.permissions = window.chrome.permissions || {',
+    '  contains: function(p, cb) { if (cb) cb(true); else return Promise.resolve(true); },',
+    '  request: function(p, cb) { if (cb) cb(true); else return Promise.resolve(true); },',
     '};',
     'window.chrome.tabs = window.chrome.tabs || {',
     '  query: function(q, cb) { if (cb) cb([{ id: 1, url: "" }]); },',
@@ -146,10 +197,10 @@ function makeChromeMock() {
 
 // -- Inject content script + deps into a fresh page -------------------------
 
-async function prepareReaderPage(p) {
+async function prepareReaderPage(p, settings) {
   // Mock chrome APIs
   await p.addInitScript({
-    content: makeChromeMock(),
+    content: makeChromeMock(settings),
   });
   // marked
   await p.addInitScript({
@@ -173,6 +224,7 @@ async function injectCSS(p) {
     'styles/reader.css',
     'styles/themes/dark.css',
     'styles/themes/light.css',
+    'styles/ai.css',
   ];
   var combined = cssFiles.map(function (f) {
     return fs.readFileSync(path.join(ROOT_DIR, f), 'utf-8');
@@ -682,7 +734,213 @@ async function main() {
     if (!(await page.$('.md-content-inner hr'))) throw new Error('Expected hr');
   });
 
-  // -- Summary ---------------------------------------------------------
+  // =====================================================================
+  //  16  AI summarize-all
+  // =====================================================================
+  await runTest('16. AI summarize-all streams into result panel', async function () {
+    var p = await context.newPage();
+    await prepareReaderPage(p, { ai: { configured: true, model: 'gpt-4o-mini', enableTranslate: true, enableSummary: true, targetLang: '中文' } });
+    await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('#md-reader-root', { timeout: 10000 });
+    await injectCSS(p);
+
+    await p.click('[data-action="summarize-all"]');
+    await p.waitForSelector('#md-ai-result-panel.md-ai-show', { timeout: 5000 });
+    await p.waitForFunction(function () {
+      var b = document.getElementById('md-ai-body');
+      return b && b.textContent.indexOf('模拟结果') !== -1;
+    }, { timeout: 5000 });
+
+    var title = await p.textContent('#md-ai-result-panel .md-ai-title');
+    if (title.indexOf('总结') === -1) throw new Error('Expected 总结 title, got "' + title + '"');
+    await p.close();
+  });
+
+  // =====================================================================
+  //  17  AI selection popover → translate
+  // =====================================================================
+  await runTest('17. AI selection popover → translate', async function () {
+    var p = await context.newPage();
+    await prepareReaderPage(p, { ai: { configured: true, model: 'gpt-4o-mini', enableTranslate: true, enableSummary: true, targetLang: '中文' } });
+    await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('.md-content-inner', { timeout: 10000 });
+    await injectCSS(p);
+
+    // Programmatically select the first paragraph and trigger mouseup.
+    await p.evaluate(function () {
+      var el = document.querySelector('.md-content-inner p');
+      if (!el) throw new Error('no paragraph to select');
+      var r = document.createRange(); r.selectNodeContents(el);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    await p.waitForTimeout(80);
+
+    await p.waitForSelector('#md-ai-popover.md-ai-show', { timeout: 5000 });
+    await p.click('[data-ai-action="translate"]');
+    await p.waitForSelector('#md-ai-result-panel.md-ai-show', { timeout: 5000 });
+    await p.waitForFunction(function () {
+      var b = document.getElementById('md-ai-body');
+      return b && b.textContent.indexOf('模拟结果') !== -1;
+    }, { timeout: 5000 });
+
+    var title = await p.textContent('#md-ai-result-panel .md-ai-title');
+    if (title.indexOf('翻译') === -1) throw new Error('Expected 翻译 title');
+    await p.close();
+  });
+
+  // =====================================================================
+  //  18  AI not configured → hint
+  // =====================================================================
+  await runTest('18. AI not configured shows hint', async function () {
+    var p = await context.newPage();
+    // SW reports "no key configured" before content.js inits (set first so the
+    // reconcile on mount reads false).
+    await p.addInitScript({ content: 'window.__mdAiMockConfigured = false;' });
+    await prepareReaderPage(p);
+    await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('#md-reader-root', { timeout: 10000 });
+    await injectCSS(p);
+
+    await p.click('[data-action="summarize-all"]');
+    await p.waitForSelector('#md-ai-result-panel.md-ai-show', { timeout: 5000 });
+    // The panel renders an actionable "配置模型" button (not just text).
+    await p.waitForFunction(function () {
+      var b = document.getElementById('md-ai-body');
+      return b && !!b.querySelector('[data-ai-action="config"]');
+    }, { timeout: 5000 });
+
+    // Clicking it asks the SW to open the config page.
+    await p.evaluate(function () {
+      document.getElementById('md-ai-body')
+        .querySelector('[data-ai-action="config"]').click();
+    });
+    await p.waitForFunction(function () { return window.__mdAiOpenConfigCalled === true; }, { timeout: 5000 });
+    await p.close();
+  });
+
+  // =====================================================================
+  //  19  Popup AI vendor preset auto-fills provider / baseUrl / model
+  // =====================================================================
+  await runTest('19. Popup AI vendor preset auto-fills config', async function () {
+    var popup = await context.newPage();
+    try {
+      // Chrome mock must exist before popup.js runs.
+      await popup.addInitScript({ content: makeChromeMock() });
+
+      var popupHtml = fs.readFileSync(path.join(ROOT_DIR, 'popup/popup.html'), 'utf-8');
+      var popupCss = fs.readFileSync(path.join(ROOT_DIR, 'popup/popup.css'), 'utf-8');
+      var popupJs = fs.readFileSync(path.join(ROOT_DIR, 'popup/popup.js'), 'utf-8');
+
+      var inlineHtml =
+        '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' + popupCss + '</style></head>' +
+        '<body>' + popupHtml
+          .replace(/<link rel="stylesheet" href="popup\.css">/, '')
+          .replace(/<script src="popup\.js"><\/script>/, '<script>' + popupJs + '</script>') +
+        '</body></html>';
+
+      await popup.goto('data:text/html,' + encodeURIComponent(inlineHtml), { waitUntil: 'domcontentloaded', timeout: 8000 });
+      await popup.waitForSelector('#aiVendor', { timeout: 5000 });
+
+      // Vendor dropdown is populated with all presets.
+      var optionCount = await popup.$$eval('#aiVendor option', function (opts) { return opts.length; });
+      if (optionCount < 8) throw new Error('Expected >=8 vendor options, got ' + optionCount);
+
+      // Default selection is 自定义 (custom).
+      var vendorVal = await popup.$eval('#aiVendor', function (el) { return el.value; });
+      if (vendorVal !== 'custom') throw new Error('Default vendor should be custom, got ' + vendorVal);
+
+      // Selecting DeepSeek auto-fills protocol + Base URL + model placeholder.
+      await popup.selectOption('#aiVendor', 'deepseek');
+      var provider = await popup.$eval('#aiProvider', function (el) { return el.value; });
+      var baseUrl = await popup.$eval('#aiBaseUrl', function (el) { return el.value; });
+      var placeholder = await popup.$eval('#aiModel', function (el) { return el.placeholder; });
+      if (provider !== 'openai') throw new Error('deepseek provider should be openai, got ' + provider);
+      if (baseUrl !== 'https://api.deepseek.com/v1') throw new Error('deepseek baseUrl mismatch: ' + baseUrl);
+      if (placeholder !== 'deepseek-chat') throw new Error('deepseek model placeholder mismatch: ' + placeholder);
+
+      // Typing a divergent Base URL flips the vendor back to 自定义.
+      await popup.$eval('#aiBaseUrl', function (el) { el.value = 'https://my-own.example.com/v1'; });
+      await popup.$eval('#aiBaseUrl', function (el) { el.dispatchEvent(new Event('change', { bubbles: true })); });
+      var vendorAfter = await popup.$eval('#aiVendor', function (el) { return el.value; });
+      if (vendorAfter !== 'custom') throw new Error('Divergent URL should reset vendor to custom, got ' + vendorAfter);
+    } finally {
+      await popup.close();
+    }
+  });
+
+  // =====================================================================
+  //  20  Not-configured shows banner + toolbar config button
+  // =====================================================================
+  await runTest('20. Not-configured shows banner + toolbar config button', async function () {
+    var p = await context.newPage();
+    await p.addInitScript({ content: 'window.__mdAiMockConfigured = false;' });
+    await prepareReaderPage(p);
+    await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('.md-content-inner', { timeout: 10000 });
+    await injectCSS(p);
+
+    // Toolbar exposes a dedicated AI-config button.
+    var cfgBtn = await p.$('[data-action="ai-config"]');
+    if (!cfgBtn) throw new Error('Expected toolbar [data-action="ai-config"] button');
+
+    // A dismissible "configure AI" banner is shown at the top of the content.
+    await p.waitForSelector('#md-ai-banner.md-ai-banner-show', { timeout: 5000 });
+
+    // Dismissing hides it for the session.
+    await p.click('#md-ai-banner [data-ai-action="banner-dismiss"]');
+    await p.waitForFunction(function () {
+      var b = document.getElementById('md-ai-banner');
+      return b && !b.classList.contains('md-ai-banner-show');
+    }, { timeout: 5000 });
+
+    // Toolbar config button opens the config page.
+    await p.click('[data-action="ai-config"]');
+    await p.waitForFunction(function () { return window.__mdAiOpenConfigCalled === true; }, { timeout: 5000 });
+    await p.close();
+  });
+
+  // =====================================================================
+  //  21  Single-word translation uses the dictionary prompt
+  // =====================================================================
+  await runTest('21. Single-word translate uses dictionary prompt', async function () {
+    var p = await context.newPage();
+    await prepareReaderPage(p, { ai: { configured: true, model: 'gpt-4o-mini', enableTranslate: true, enableSummary: true, targetLang: '中文' } });
+    await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('.md-content-inner', { timeout: 10000 });
+    await injectCSS(p);
+
+    // Select exactly one English word from the first paragraph.
+    await p.evaluate(function () {
+      var para = document.querySelector('.md-content-inner p');
+      if (!para) throw new Error('no paragraph');
+      var walker = document.createTreeWalker(para, NodeFilter.SHOW_TEXT);
+      var node = walker.nextNode();
+      if (!node) throw new Error('no text node');
+      var m = String(node.nodeValue).match(/[A-Za-z]+/);
+      if (!m) throw new Error('no word');
+      var r = document.createRange();
+      r.setStart(node, m.index);
+      r.setEnd(node, m.index + m[0].length);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    await p.waitForTimeout(80);
+    await p.waitForSelector('#md-ai-popover.md-ai-show', { timeout: 5000 });
+    await p.click('[data-ai-action="translate"]');
+
+    // The captured system prompt must be the dictionary entry (word branch).
+    await p.waitForFunction(function () {
+      var m = window.__mdLastAiMsg;
+      return m && m.messages && m.messages[0] && /dictionary/i.test(m.messages[0].content) && /IPA/i.test(m.messages[0].content);
+    }, { timeout: 5000 });
+    // The user message is exactly the selected single word.
+    var word = await p.evaluate(function () { return window.__mdLastAiMsg.messages[1].content; });
+    if (!/^[A-Za-z]+$/.test(word)) throw new Error('Expected a single word as user content, got "' + word + '"');
+    await p.close();
+  });
+
+
   printSummary();
 }
 

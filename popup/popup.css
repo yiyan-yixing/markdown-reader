@@ -233,3 +233,162 @@ body {
   text-align: center;
   line-height: 1.4;
 }
+
+/* ── AI assistant config ── */
+.popup-ai-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.popup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.popup-field-label {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.popup-input-text {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #e2e4f0;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #ffffff;
+  color: #374151;
+  transition: border-color 0.15s;
+}
+
+.popup-input-text:focus {
+  outline: none;
+  border-color: #607cd2;
+}
+
+.popup-select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #e2e4f0;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+}
+
+.popup-key-row {
+  display: flex;
+  gap: 6px;
+}
+
+.popup-key-row .popup-input-text {
+  flex: 1;
+}
+
+.popup-key-toggle {
+  flex-shrink: 0;
+  width: 32px;
+  border: 1px solid #e2e4f0;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.1s;
+}
+
+.popup-key-toggle:hover {
+  background: #e8eaf6;
+}
+
+.popup-ai-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.popup-ai-test-btn {
+  padding: 6px 12px;
+  border: 1px solid #607cd2;
+  border-radius: 6px;
+  background: rgba(96, 124, 210, 0.06);
+  color: #607cd2;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.popup-ai-test-btn:hover {
+  background: rgba(96, 124, 210, 0.14);
+}
+
+.popup-ai-test-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.popup-ai-status {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.popup-ai-status.ok { color: #16a34a; }
+.popup-ai-status.err { color: #dc2626; }
+
+.popup-ai-hint {
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: #9ca3af;
+  line-height: 1.45;
+}
+
+/* ── "Done" button (standalone config page only) ── */
+.popup-ai-done-btn {
+  margin-top: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #607cd2;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.popup-ai-done-btn:hover {
+  background: #4f68b8;
+}
+
+/* ── Standalone mode: popup.html opened as a full tab from the reader ── */
+body.standalone {
+  width: auto;
+  min-height: 100vh;
+  background: #f2f4ff;
+  display: flex;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+body.standalone .popup-container {
+  width: 480px;
+  max-width: 100%;
+}
+
+/* Draw the eye to the AI section when opened as a config page. */
+body.standalone #popup-ai-section {
+  border: 1px solid #607cd2;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(96, 124, 210, 0.12);
+}

@@ -28,6 +28,16 @@
     customCSS: '',
     allPlugins: true,
     pluginOptions: {},
+    ai: {
+      vendor: 'custom',
+      provider: 'openai',
+      baseUrl: '',
+      model: '',
+      targetLang: '中文',
+      enableTranslate: true,
+      enableSummary: true,
+      configured: false,
+    },
   };
   let settings = { ...DEFAULTS };
 
@@ -308,6 +318,8 @@
           <button class="md-btn" data-action="toggle-all-sidebars" title="Toggle All Sidebars">
             ${ICONS.expand}
           </button>
+          <button class="md-btn" data-action="summarize-all" title="总结全文（AI）">✨</button>
+          <button class="md-btn" data-action="ai-config" title="AI 助手设置">🤖</button>
           <button class="md-btn" data-action="open-settings" title="Settings">
             ${ICONS.settings}
           </button>
@@ -986,6 +998,19 @@ function buildOutline(container) {
     const list = document.getElementById('md-settings-list');
     if (!list) return;
 
+    // Read / write a toggle value, mapping the AI keys to settings.ai.*.
+    function getSetting(key) {
+      if (key === 'aiTranslate') return settings.ai && settings.ai.enableTranslate !== false;
+      if (key === 'aiSummary') return settings.ai && settings.ai.enableSummary !== false;
+      return settings[key] !== false;
+    }
+    function setSetting(key, val) {
+      settings.ai = settings.ai || {};
+      if (key === 'aiTranslate') settings.ai.enableTranslate = val;
+      else if (key === 'aiSummary') settings.ai.enableSummary = val;
+      else settings[key] = val;
+    }
+
     const features = [
       { key: 'allPlugins', label: 'All Built-in Markdown Plugins', desc: 'Enable GFM tables, task lists, strikethrough, etc.' },
       { key: 'showOutline', label: 'Auto-generate Outline', desc: 'Automatically create table of contents from headings' },
@@ -996,6 +1021,10 @@ function buildOutline(container) {
       { key: 'fontSize', label: 'Adjust Font', desc: 'Change font size in pixels', type: 'number' },
       { key: 'showFileTree', label: 'Folder Directory', desc: 'Show file tree sidebar' },
       { key: 'pluginOptions', label: 'Markdown plugin options', desc: 'Configure individual markdown extensions' },
+      { key: 'aiTranslate', label: 'AI 划词翻译', desc: '选中文字后点「翻译」（需在弹窗配置模型）' },
+      { key: 'aiSummary', label: 'AI 总结', desc: '选中段落或点工具栏「✨」总结全文' },
+      { key: 'aiTargetLang', label: 'AI 翻译目标语言', desc: '划词翻译输出语言', type: 'aiLang' },
+      { key: 'aiConfigInfo', label: 'AI 模型配置', desc: 'Provider / Base URL / API Key / 模型名 请在扩展弹窗「AI 助手」中填写', type: 'info' },
       { key: 'moreFeatures', label: 'More Features in Development', desc: 'Stay tuned for updates!', type: 'info' },
     ];
 
@@ -1035,8 +1064,20 @@ function buildOutline(container) {
             <textarea class="md-settings-textarea" data-key="${f.key}" rows="3" placeholder="e.g. .md-content h1 { color: red; }">${settings[f.key] || ''}</textarea>
           </div>
         `;
+      } else if (f.type === 'aiLang') {
+        const cur = (settings.ai && settings.ai.targetLang) || '中文';
+        const langs = ['中文', 'English', '日本語', '한국어', 'Français', 'Deutsch', 'Español'];
+        const opts = langs.map(l => '<option' + (l === cur ? ' selected' : '') + '>' + l + '</option>').join('');
+        row.innerHTML = `
+          <span class="md-settings-check md-settings-check-info">🌐</span>
+          <div class="md-settings-text">
+            <div class="md-settings-label">${f.label}</div>
+            <div class="md-settings-desc">${f.desc}</div>
+            <select class="md-settings-select" data-ai-lang>${opts}</select>
+          </div>
+        `;
       } else {
-        const isChecked = settings[f.key] !== false;
+        const isChecked = getSetting(f.key);
         const accent = settings.theme === 'dark' ? '#6785e0' : '#607cd2';
         row.innerHTML = `
           <span class="md-settings-check ${isChecked ? 'checked' : ''}" data-toggle="${f.key}">
@@ -1056,11 +1097,22 @@ function buildOutline(container) {
     list.querySelectorAll('[data-toggle]').forEach(check => {
       check.addEventListener('click', () => {
         const key = check.dataset.toggle;
-        settings[key] = !settings[key];
-        check.classList.toggle('checked');
+        const newVal = !getSetting(key);
+        setSetting(key, newVal);
+        check.classList.toggle('checked', newVal);
         const accent = settings.theme === 'dark' ? '#6785e0' : '#607cd2';
         const svg = check.querySelector('polyline');
-        svg.setAttribute('stroke', settings[key] ? accent : '#9ca3af');
+        if (svg) svg.setAttribute('stroke', newVal ? accent : '#9ca3af');
+        saveSettings();
+        applySettings();
+      });
+    });
+
+    // AI target-language selector
+    list.querySelectorAll('[data-ai-lang]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        settings.ai = settings.ai || {};
+        settings.ai.targetLang = sel.value;
         saveSettings();
         applySettings();
       });
@@ -1231,8 +1283,22 @@ function buildOutline(container) {
           document.querySelector('.md-content')?.scrollTo({ top: 0, behavior: 'smooth' });
           break;
 
+        case 'summarize-all': {
+          const inner = document.querySelector('.md-content-inner');
+          let docText = inner ? inner.innerText : '';
+          if (docText.length > 12000) docText = docText.slice(0, 12000) + '\n\n[…已截断，原文过长…]';
+          const h1 = inner && inner.querySelector('h1');
+          const docTitle = (h1 ? h1.textContent : document.title || '').trim();
+          aiRun('summarize', docTitle ? ('Title: ' + docTitle + '\n\n' + docText) : docText, 'all');
+          break;
+        }
+
         case 'open-settings':
           document.getElementById('md-settings-panel').style.display = '';
+          break;
+
+        case 'ai-config':
+          openAIConfig();
           break;
 
         case 'close-settings':
@@ -1385,12 +1451,391 @@ function buildOutline(container) {
     // Setup responsive sidebars
     setupResponsiveSidebars();
 
+    // Setup AI assistant (selection popover + streaming result panel)
+    setupAI();
+    // Show the "configure AI" banner inside the reading area.
+    renderAIBanner();
+
     // Hide loading overlay
     const loading = document.getElementById('md-loading');
     if (loading) loading.style.display = 'none';
 
     // Apply initial settings
     applySettings();
+    // Ask the SW whether a model key exists (single source of truth for "configured").
+    reconcileAIConfig();
+  }
+
+  // ── AI assistant (selection popover + streaming result panel) ──
+  // Talks to the background SW over a Port ('md-reader-llm'); the API key
+  // never enters the content script — it is read from storage.local by the SW.
+  let aiPopover = null;
+  let aiPanel = null;
+  let aiPort = null;
+  let aiAccum = '';
+  let aiSelectionTimer = null;
+  let aiBannerDismissed = false;
+
+  // Open the standalone AI config page (popup.html as a tab). Delegated to the
+  // background SW — content scripts can't open tabs or request host permissions.
+  function openAIConfig() {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
+    try { chrome.runtime.sendMessage({ type: 'openAIConfig' }); } catch (_) {}
+  }
+
+  // Ask the SW whether a key is present (it is the single source of truth); the
+  // key value never enters content — only a boolean comes back.
+  function reconcileAIConfig() {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+      updateAIBanner();
+      return;
+    }
+    try {
+      chrome.runtime.sendMessage({ type: 'aiCheckConfig' }, resp => {
+        if (settings.ai) settings.ai.configured = !!(resp && resp.configured);
+        updateAIBanner();
+      });
+    } catch (_) { updateAIBanner(); }
+  }
+
+  // Dismissible banner at the top of the reading area, shown only when the model
+  // isn't configured. Makes "go configure" impossible to miss.
+  function renderAIBanner() {
+    const inner = document.querySelector('.md-content-inner');
+    if (!inner || document.getElementById('md-ai-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'md-ai-banner';
+    banner.className = 'md-ai-banner';
+    banner.innerHTML =
+      '<span class="md-ai-banner-text">🤖 配置 AI 助手，以启用划词翻译 / 总结</span>' +
+      '<button class="md-ai-config-btn" data-ai-action="config">立即配置</button>' +
+      '<button class="md-ai-banner-close" data-ai-action="banner-dismiss" title="不再提示">✕</button>';
+    banner.addEventListener('click', e => {
+      const btn = e.target.closest('[data-ai-action]');
+      if (!btn) return;
+      if (btn.dataset.aiAction === 'config') openAIConfig();
+      else if (btn.dataset.aiAction === 'banner-dismiss') {
+        aiBannerDismissed = true;
+        updateAIBanner();
+      }
+    });
+    inner.insertBefore(banner, inner.firstChild);
+  }
+
+  function updateAIBanner() {
+    const banner = document.getElementById('md-ai-banner');
+    if (!banner) return;
+    const configured = !!(settings.ai && settings.ai.configured);
+    banner.classList.toggle('md-ai-banner-show', !configured && !aiBannerDismissed);
+  }
+
+  function aiEscapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function setupAI() {
+    const root = document.getElementById('md-reader-root');
+    if (!root) return;
+    if (document.getElementById('md-ai-popover')) return; // already wired
+
+    aiPopover = document.createElement('div');
+    aiPopover.className = 'md-ai-popover';
+    aiPopover.id = 'md-ai-popover';
+    aiPopover.innerHTML = `
+      <div class="md-ai-popover-actions">
+        <button class="md-ai-popover-btn" data-ai-action="translate">🌐 翻译</button>
+        <button class="md-ai-popover-btn" data-ai-action="summarize">📝 总结</button>
+      </div>
+      <button class="md-ai-popover-btn md-ai-config-link" data-ai-action="config">⚙️ 配置模型</button>
+    `;
+    root.appendChild(aiPopover);
+
+    aiPanel = document.createElement('div');
+    aiPanel.className = 'md-ai-result-panel';
+    aiPanel.id = 'md-ai-result-panel';
+    aiPanel.innerHTML = `
+      <div class="md-ai-header">
+        <div class="md-ai-title">✨ AI</div>
+        <div class="md-ai-actions">
+          <button class="md-ai-icon-btn" data-ai-action="copy" title="复制">⧉</button>
+          <button class="md-ai-icon-btn" data-ai-action="close" title="关闭">✕</button>
+        </div>
+      </div>
+      <div class="md-ai-body" id="md-ai-body"></div>
+    `;
+    root.appendChild(aiPanel);
+
+    // Popover action clicks
+    aiPopover.addEventListener('click', e => {
+      const btn = e.target.closest('[data-ai-action]');
+      if (!btn) return;
+      const action = btn.dataset.aiAction;
+      aiHidePopover();
+      if (action === 'config') { openAIConfig(); return; }
+      const sel = window.getSelection();
+      const text = sel ? sel.toString().trim() : '';
+      if (action === 'translate') aiRun('translate', text);
+      else if (action === 'summarize') aiRun('summarize', text, 'selection');
+    });
+
+    // Panel action clicks
+    aiPanel.addEventListener('click', e => {
+      const btn = e.target.closest('[data-ai-action]');
+      if (!btn) return;
+      if (btn.dataset.aiAction === 'close') aiHidePanel();
+      else if (btn.dataset.aiAction === 'copy') aiCopyResult();
+      else if (btn.dataset.aiAction === 'config') openAIConfig();
+    });
+
+    // Selection → show popover (debounced). Fires once per reader mount.
+    document.addEventListener('mouseup', () => {
+      clearTimeout(aiSelectionTimer);
+      aiSelectionTimer = setTimeout(aiHandleSelection, 10);
+    });
+    document.addEventListener('touchend', () => {
+      clearTimeout(aiSelectionTimer);
+      aiSelectionTimer = setTimeout(aiHandleSelection, 10);
+    });
+    // Hide the popover when starting a new press outside it with no selection.
+    document.addEventListener('mousedown', e => {
+      if (aiPopover && aiPopover.contains(e.target)) return;
+      if (window.getSelection().toString().trim() === '') aiHidePopover();
+    });
+    document.querySelector('.md-content')?.addEventListener('scroll', aiHidePopover, { passive: true });
+  }
+
+  function aiHandleSelection() {
+    if (!aiPopover) return;
+    const sel = window.getSelection();
+    const text = sel ? sel.toString().trim() : '';
+    if (!text) { aiHidePopover(); return; }
+
+    const content = document.querySelector('.md-content-inner');
+    const anchor = sel.anchorNode;
+    if (!content || !anchor || !content.contains(anchor)) { aiHidePopover(); return; }
+
+    const ai = settings.ai || {};
+    const actions = aiPopover.querySelector('.md-ai-popover-actions');
+    const configBtn = aiPopover.querySelector('[data-ai-action="config"]');
+
+    if (!ai.configured) {
+      if (actions) actions.style.display = 'none';
+      if (configBtn) configBtn.style.display = '';
+      aiPositionPopover(sel);
+      aiPopover.classList.add('md-ai-show');
+      return;
+    }
+
+    const showTranslate = ai.enableTranslate !== false;
+    const showSummary = ai.enableSummary !== false;
+    if (!showTranslate && !showSummary) { aiHidePopover(); return; }
+
+    if (actions) {
+      actions.style.display = '';
+      const t = actions.querySelector('[data-ai-action="translate"]');
+      const s = actions.querySelector('[data-ai-action="summarize"]');
+      if (t) t.style.display = showTranslate ? '' : 'none';
+      if (s) s.style.display = showSummary ? '' : 'none';
+    }
+    if (configBtn) configBtn.style.display = 'none';
+    aiPositionPopover(sel);
+    aiPopover.classList.add('md-ai-show');
+  }
+
+  function aiPositionPopover(sel) {
+    if (!aiPopover || !sel || sel.rangeCount === 0) return;
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    const popW = 210, popH = 40;
+    const left = Math.max(8, Math.min(window.innerWidth - popW - 8, rect.left));
+    const below = rect.bottom + 8;
+    const top = (window.innerHeight - below < popH + 8) ? Math.max(8, rect.top - popH - 4) : below;
+    aiPopover.style.left = left + 'px';
+    aiPopover.style.top = top + 'px';
+  }
+
+  function aiHidePopover() { if (aiPopover) aiPopover.classList.remove('md-ai-show'); }
+  function aiShowPanel() { if (aiPanel) aiPanel.classList.add('md-ai-show'); }
+  function aiHidePanel() { if (aiPanel) aiPanel.classList.remove('md-ai-show'); }
+
+  function aiSetTitle(task) {
+    const t = aiPanel && aiPanel.querySelector('.md-ai-title');
+    if (t) t.textContent = task === 'translate' ? '🌐 翻译' : '📝 总结';
+  }
+
+  function aiSetBody(html) {
+    const body = document.getElementById('md-ai-body');
+    if (body) body.innerHTML = html;
+  }
+  function aiSetLoading(label) {
+    aiSetBody('<div class="md-ai-loading"><span class="md-ai-spinner"></span>' + aiEscapeHtml(label) + '</div>');
+  }
+  function aiSetHint(msg) {
+    aiSetBody('<div class="md-ai-loading">' + aiEscapeHtml(msg) + '</div>');
+  }
+  // Not-configured prompt: actionable — a button that opens the config page.
+  function aiSetConfigPrompt() {
+    aiSetBody(
+      '<div class="md-ai-empty">' +
+      '<p>尚未配置 AI 模型</p>' +
+      '<button class="md-ai-config-btn" data-ai-action="config">⚙️ 立即配置模型</button>' +
+      '</div>'
+    );
+  }
+  function aiSetError(msg) {
+    aiSetBody('<div class="md-ai-error"><b>出错了</b>' + aiEscapeHtml(msg) + '</div>');
+  }
+
+  // Is the selection a single English word? → switch to a dictionary entry.
+  function aiIsSingleWord(text) {
+    const t = String(text || '').trim();
+    return /^[A-Za-z][A-Za-z'-]{0,39}$/.test(t);
+  }
+
+  function aiBuildMessages(task, text, mode) {
+    const lang = (settings.ai && settings.ai.targetLang) || '中文';
+    const body = String(text || '');
+
+    if (task === 'translate') {
+      // Single word → dictionary entry (phonetics, POS, synonyms/antonyms, examples).
+      if (aiIsSingleWord(body)) {
+        return [
+          {
+            role: 'system',
+            content:
+              'You are a precise English dictionary. The user selected ONE English word. ' +
+              'Reply with a concise dictionary entry written in ' + lang + ', using exactly this markdown structure ' +
+              '(keep the headword, IPA phonetics and English example sentences in English; write the meanings and translations in ' + lang + '):\n\n' +
+              '**<word>**\n' +
+              '- 🇬🇧 /UK IPA/  🇺🇸 /US IPA/\n' +
+              '- 词性 + each sense on its own line\n' +
+              '- 同义词: …\n' +
+              '- 反义词: …\n' +
+              '- 例句: 1–2 English sentences, each followed by its ' + lang + ' translation in parentheses\n\n' +
+              'Rules: use real IPA; list every common part of speech; output ONLY the entry, no preamble.'
+          },
+          { role: 'user', content: body },
+        ];
+      }
+      // Phrase / sentence → plain translation.
+      return [
+        { role: 'system', content: 'You are a precise translation engine. Translate the user text into ' + lang + '. Output ONLY the translation, preserving any code or markdown formatting. Do not add explanations or notes.' },
+        { role: 'user', content: body },
+      ];
+    }
+
+    // Summarize
+    if (mode === 'all') {
+      return [
+        {
+          role: 'system',
+          content:
+            'You are an expert reader. Summarize the document below in ' + lang + ' as well-structured markdown. ' +
+            'Write ENTIRELY in ' + lang + ', including the section headings. Use these sections ' +
+            '(translate the heading names into ' + lang + '; omit a section only if the source has nothing for it):\n' +
+            '## Overview — one or two sentences: the core thesis + topic.\n' +
+            '## Key points — the 5–8 most important points, each a bullet with a short explanation.\n' +
+            '## Conclusions / Data — key conclusions, numbers, evidence.\n' +
+            '## Action items — concrete next steps, if applicable.\n\n' +
+            'Preserve technical terms faithfully. Be concise. Do NOT invent content that is not in the source.'
+        },
+        { role: 'user', content: body },
+      ];
+    }
+    // Selection / passage summary
+    return [
+      {
+        role: 'system',
+        content:
+          'Summarize the selected passage below in ' + lang + ' as 3–5 concise markdown bullet points, ' +
+          'capturing the core point first, then its key supporting detail. Write in ' + lang + '. ' +
+          'Be faithful — do NOT add information that is not present in the passage.'
+      },
+      { role: 'user', content: body },
+    ];
+  }
+
+  function aiRenderStreaming() {
+    const body = document.getElementById('md-ai-body');
+    if (!body) return;
+    const pre = document.createElement('div');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.textContent = aiAccum;
+    const caret = document.createElement('span');
+    caret.className = 'md-ai-caret';
+    body.innerHTML = '';
+    body.appendChild(pre);
+    body.appendChild(caret);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function aiRenderFinal() {
+    const body = document.getElementById('md-ai-body');
+    if (!body) return;
+    if (aiAccum && typeof marked !== 'undefined') {
+      body.innerHTML = renderMarkdown(aiAccum);
+    } else {
+      body.textContent = aiAccum || '(空)';
+    }
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function aiRun(task, text, mode) {
+    const ai = settings.ai || {};
+
+    if (!ai.configured) {
+      aiShowPanel();
+      aiSetTitle(task);
+      aiSetConfigPrompt();
+      return;
+    }
+    if (!text || !text.trim()) {
+      aiShowPanel();
+      aiSetTitle(task);
+      aiSetHint(task === 'translate' ? '请先选中要翻译的文字。' : '请先选中要总结的内容。');
+      return;
+    }
+
+    aiShowPanel();
+    aiSetTitle(task);
+    aiSetLoading(task === 'translate' ? '正在翻译…' : '正在总结…');
+    aiAccum = '';
+
+    if (aiPort) { try { aiPort.disconnect(); } catch (_) {} }
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.connect) {
+      aiSetError('当前环境无法连接扩展后台（chrome.runtime 不可用）。');
+      return;
+    }
+    const myPort = chrome.runtime.connect({ name: 'md-reader-llm' });
+    aiPort = myPort;
+    // Guard against stale ports when a newer request supersedes this one.
+    aiPort.onMessage.addListener(m => {
+      if (aiPort !== myPort || !m) return;
+      if (m.type === 'chunk') { aiAccum += m.text || ''; aiRenderStreaming(); }
+      else if (m.type === 'done') { aiRenderFinal(); }
+      else if (m.type === 'error') { aiSetError(m.error || '未知错误'); }
+    });
+    aiPort.onDisconnect.addListener(() => {
+      if (aiPort !== myPort) return;
+      const body = document.getElementById('md-ai-body');
+      if (body && body.querySelector('.md-ai-loading')) aiSetError('连接已断开，请重试。');
+    });
+    myPort.postMessage({
+      type: 'aiComplete',
+      provider: ai.provider,
+      baseUrl: ai.baseUrl,
+      model: ai.model,
+      messages: aiBuildMessages(task, text, mode),
+      temperature: task === 'translate' ? 0.2 : 0.4,
+    });
+  }
+
+  function aiCopyResult() {
+    if (!aiAccum) return;
+    navigator.clipboard.writeText(aiAccum).then(() => {
+      const btn = aiPanel && aiPanel.querySelector('[data-ai-action="copy"]');
+      if (btn) { const old = btn.textContent; btn.textContent = '✓'; setTimeout(() => { btn.textContent = old; }, 1200); }
+    }).catch(() => {});
   }
 
   // ── Floating action button for rendered pages (GitHub/GitLab blob) ──
@@ -1533,6 +1978,8 @@ function buildOutline(container) {
         if (msg.type === 'settingsUpdated' && msg.settings) {
           Object.assign(settings, msg.settings);
           applySettings();
+          // Re-derive "configured" from the SW — don't trust the broadcasted flag.
+          reconcileAIConfig();
         }
         if (msg.type === 'requestFileTree') {
           sendResponse({ data: [] });

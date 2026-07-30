@@ -110,6 +110,72 @@
       </div>
     </div>
 
+    <div class="popup-section" id="popup-ai-section">
+      <h2 class="popup-section-title">🤖 AI 助手（自带模型）</h2>
+      <div class="popup-ai-form">
+        <label class="popup-field">
+          <span class="popup-field-label">服务商（预设，选完自动填好 Base URL）</span>
+          <select class="popup-select" id="aiVendor"></select>
+        </label>
+        <label class="popup-field">
+          <span class="popup-field-label">服务商协议</span>
+          <select class="popup-select" id="aiProvider">
+            <option value="openai">OpenAI 兼容</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+          </select>
+        </label>
+        <label class="popup-field">
+          <span class="popup-field-label">Base URL（留空用默认）</span>
+          <input type="text" class="popup-input-text" id="aiBaseUrl" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="popup-field">
+          <span class="popup-field-label">API Key（仅本地存储）</span>
+          <div class="popup-key-row">
+            <input type="password" class="popup-input-text" id="aiApiKey" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+            <button class="popup-key-toggle" id="aiKeyToggle" type="button" title="显示 / 隐藏">👁</button>
+          </div>
+        </label>
+        <label class="popup-field">
+          <span class="popup-field-label">模型名称</span>
+          <input type="text" class="popup-input-text" id="aiModel" placeholder="gpt-4o-mini" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="popup-field">
+          <span class="popup-field-label">翻译目标语言</span>
+          <select class="popup-select" id="aiTargetLang">
+            <option>中文</option>
+            <option>English</option>
+            <option>日本語</option>
+            <option>한국어</option>
+            <option>Français</option>
+            <option>Deutsch</option>
+            <option>Español</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="popup-feature-list" style="margin-top:6px;">
+        <div class="popup-feature" data-key="aiTranslate">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">启用划词翻译</div>
+          </div>
+        </div>
+        <div class="popup-feature" data-key="aiSummary">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">启用总结（段落 / 全篇）</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="popup-ai-actions">
+        <button class="popup-ai-test-btn" id="aiTestBtn" type="button">🔌 测试连接</button>
+        <span class="popup-ai-status" id="aiStatus"></span>
+      </div>
+      <div class="popup-ai-hint">密钥只存在本地（chrome.storage.local），不会同步到 Google 账号。填写 Base URL 后保存时会请求访问该域名。</div>
+      <button class="popup-ai-done-btn" id="aiDoneBtn" type="button" style="display:none;">✓ 完成，返回阅读</button>
+    </div>
+
     <div class="popup-section" id="popup-activate-section" style="display:none;">
       <button class="popup-activate-btn" id="popupActivateReader">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
