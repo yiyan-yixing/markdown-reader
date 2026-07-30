@@ -156,6 +156,18 @@
   color: var(--md-btn-active-color);
 }
 
+/* AI action buttons (summarize-all / ai-config) — tinted in the brand color so
+   they read as a distinct, discoverable AI group, while staying line-style. */
+.md-btn-sparkles,
+.md-btn-bot {
+  color: var(--md-primary);
+}
+.md-btn-sparkles:hover,
+.md-btn-bot:hover {
+  background: var(--md-primary-alpha);
+  color: var(--md-primary-hover);
+}
+
 .md-btn-text {
   width: auto;
   padding: 0 10px;
