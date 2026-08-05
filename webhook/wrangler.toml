@@ -1,0 +1,18 @@
+# Cloudflare Workers config — Markdown Reader Pro refund webhook
+# https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "mdreader-ls-webhook"
+main = "worker.js"
+compatibility_date = "2026-08-05"
+
+# Secrets are injected at runtime — DO NOT put values in this file.
+# Set them with:
+#   wrangler secret put LS_API_TOKEN     # LS REST API bearer (license-keys:write)
+#   wrangler secret put WEBHOOK_SECRET   # LS webhook signing secret
+#
+# Then deploy:
+#   wrangler deploy
+#
+# Copy the resulting https://mdreader-ls-webhook.<your-subdomain>.workers.dev URL
+# into the LemonSqueezy dashboard → Settings → Webhooks, subscribed to
+# `order_refunded` (and any other events you want to silently ignore).

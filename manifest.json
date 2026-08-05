@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Markdown Reader",
-  "version": "1.0.0",
-  "description": "Beautiful Markdown reader with outline, file tree, themes, AI translation & summarization (bring your own model). Intercepts .md URLs and GitHub/GitLab blob pages.",
+  "version": "1.1.0",
+  "description": "Beautiful Markdown reader with outline, file tree, themes (incl. Pro: Nord / Solarized / Dracula / Tokyo Night), AI translation & summarization (bring your own model). Intercepts .md URLs and GitHub/GitLab/Bitbucket blob pages.",
   "permissions": [
     "activeTab",
     "storage",
@@ -18,7 +18,8 @@
     "https://raw.githubusercontent.com/*",
     "https://gitlab.com/*",
     "https://bitbucket.org/*",
-    "file:///*"
+    "file:///*",
+    "https://api.lemonsqueezy.com/*"
   ],
   "icons": {
     "16": "icons/icon16.png",

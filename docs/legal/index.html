@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Reader — Privacy &amp; Policies</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 0 auto; padding: 32px 20px; color: #2d3d50; line-height: 1.6; }
+    h1 { font-size: 1.8em; border-bottom: 2px solid #eaebee; padding-bottom: 8px; }
+    h2 { font-size: 1.2em; margin-top: 1.8em; color: #4c68bb; }
+    .card { border: 1px solid #eaebee; border-radius: 8px; padding: 16px 20px; margin: 12px 0; background: #fafbfc; }
+    .card h2 { margin-top: 0; }
+    a { color: #6785e0; }
+    .meta { color: #909090; font-size: 0.9em; }
+    .support { margin-top: 2em; padding: 12px 16px; background: #f3f6ff; border-radius: 8px; }
+    code { background: #f3f6ff; padding: 1px 5px; border-radius: 3px; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+  <h1>Markdown Reader &amp; Markdown Reader Pro — Policies</h1>
+  <p class="meta">Effective: 2026-08-05 &middot; Product by 一言一行 (yiyan-yixing)</p>
+
+  <p>Markdown Reader is a browser extension that renders Markdown files in a clean,
+  three-panel reader. <strong>Markdown Reader Pro</strong> adds licensed themes as a
+  one-time purchase. This page summarizes our data practices; full texts are linked below.</p>
+
+  <div class="card">
+    <h2>1. Privacy Policy</h2>
+    <p><strong>We don't run a server for your data.</strong> The extension has no backend of its own.</p>
+    <ul>
+      <li><strong>AI feature (BYO model):</strong> your API key is stored only in <code>chrome.storage.local</code> on your machine — it is never synced to Google, never sent to any server we control, and requests go directly from your browser to the model endpoint you configured.</li>
+      <li><strong>Pro license:</strong> your license key is stored only in <code>chrome.storage.local</code> and is sent exclusively to LemonSqueezy (our Merchant of Record) for activation/validation. It is never transmitted to any server we control.</li>
+      <li><strong>Settings &amp; preferences:</strong> stored via Chrome's <code>storage.sync</code>/<code>storage.local</code>.</li>
+      <li><strong>No analytics, no tracking, no advertising</strong> — we collect nothing.</li>
+      <li><strong>declarativeNetRequest</strong> is used solely to remove the <code>Origin</code> header from this extension's own requests to <code>localhost</code>/<code>127.0.0.1</code>/<code>0.0.0.0</code>, so local AI servers (Ollama, LM Studio, …) accept the request. It never reads cookies, auth tokens, or response bodies, and never touches public domains.</li>
+    </ul>
+    <p><a href="privacy-policy.md">Full privacy policy →</a></p>
+  </div>
+
+  <div class="card">
+    <h2>2. Refund Policy (Markdown Reader Pro)</h2>
+    <p><strong>$2.99 one-time purchase.</strong> 7-day no-questions refund + 30-day bug-based refund, processed via LemonSqueezy. Refunding automatically disables the license (Pro relocks on the next online validation).</p>
+    <p><a href="refund-policy.md">Full refund policy →</a></p>
+  </div>
+
+  <div class="card">
+    <h2>3. AI Disclaimer (Terms of Service excerpt)</h2>
+    <p>The AI translate/summarize features use <strong>your own model</strong> (OpenAI, DeepSeek, Anthropic, local Ollama, etc.). We are not responsible for AI output. You must comply with your model provider's terms.</p>
+    <p><a href="ai-disclaimer.md">Full AI disclaimer →</a></p>
+  </div>
+
+  <div class="card">
+    <h2>4. EU 14-day Withdrawal Consent</h2>
+    <p>At checkout, EU consumers consent to immediate digital delivery and waive the standard 14-day withdrawal right (Directive 2011/83/EU Article 16). Refunds remain available under our refund policy above.</p>
+    <p><a href="eu-withdrawal-consent.md">Full consent text →</a></p>
+  </div>
+
+  <div class="support">
+    <strong>Support:</strong> questions, refunds, or bug reports?
+    Open an issue at <a href="https://github.com/yiyan-yixing/markdown-reader/issues">github.com/yiyan-yixing/markdown-reader/issues</a>
+    — or use the "查询我的订单" link in the extension popup for license/order self-service.
+  </div>
+
+  <p class="meta" style="margin-top:2em;">Source repo: <a href="https://github.com/yiyan-yixing/markdown-reader">github.com/yiyan-yixing/markdown-reader</a></p>
+</body>
+</html>

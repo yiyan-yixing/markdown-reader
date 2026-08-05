@@ -41,6 +41,39 @@
   };
   let settings = { ...DEFAULTS };
 
+  // ── Pro theme gate (Markdown Reader Pro, v1.1.0) ──────────────────────
+  // Pro themes require an active license. The content script asks the SW
+  // (single source of truth) for the Pro boolean — never the license_key.
+  const PRO_THEMES = ['nord', 'solarized', 'dracula', 'tokyo-night'];
+  const FREE_FALLBACK_THEME = 'light';
+  let licenseState = { isPro: false, status: null };
+
+  function sanitizeTheme(theme) {
+    if (PRO_THEMES.indexOf(theme) !== -1 && !licenseState.isPro) {
+      return FREE_FALLBACK_THEME; // locked — fall back so a Pro theme never shows free
+    }
+    return theme;
+  }
+
+  function refreshLicenseState() {
+    if (typeof chrome === 'undefined' || !chrome.runtime) return Promise.resolve();
+    return new Promise(resolve => {
+      try {
+        chrome.runtime.sendMessage({ type: 'licenseGetStatus' }, state => {
+          if (state) licenseState = state;
+          // Persist a fallback if a Pro theme is saved but the user isn't Pro.
+          if (PRO_THEMES.indexOf(settings.theme) !== -1 && !licenseState.isPro) {
+            settings.theme = FREE_FALLBACK_THEME;
+            try { chrome.storage.sync.set({ mdReaderSettings: settings }); } catch (_) {}
+          }
+          const root = document.getElementById('md-reader-root');
+          if (root) root.setAttribute('data-theme', sanitizeTheme(settings.theme));
+          resolve();
+        });
+      } catch (_) { resolve(); }
+    });
+  }
+
   // ── Load settings from storage ──
   function loadSettings() {
     return new Promise(resolve => {
@@ -286,7 +319,9 @@
   function buildReaderUI(rawMarkdown) {
     const root = document.createElement('div');
     root.id = 'md-reader-root';
-    root.setAttribute('data-theme', settings.theme);
+    root.setAttribute('data-theme', sanitizeTheme(settings.theme));
+    // Sync Pro state from the SW (single source of truth) once the reader is up.
+    refreshLicenseState();
 
     const fileInfo = getCurrentFileInfo();
 
@@ -1146,7 +1181,7 @@ function buildOutline(container) {
     const root = document.getElementById('md-reader-root');
     if (!root) return;
 
-    root.setAttribute('data-theme', settings.theme);
+    root.setAttribute('data-theme', sanitizeTheme(settings.theme));
 
     const content = document.querySelector('.md-content');
     if (content) content.style.fontSize = settings.fontSize + 'px';
@@ -1266,7 +1301,7 @@ function buildOutline(container) {
 
         case 'toggle-theme': {
           settings.theme = settings.theme === 'light' ? 'dark' : 'light';
-          root.setAttribute('data-theme', settings.theme);
+          root.setAttribute('data-theme', sanitizeTheme(settings.theme));
           saveSettings();
           break;
         }
@@ -1984,6 +2019,11 @@ function buildOutline(container) {
           applySettings();
           // Re-derive "configured" from the SW — don't trust the broadcasted flag.
           reconcileAIConfig();
+        }
+        if (msg.type === 'licenseUpdated') {
+          // Pro state changed (activated / deactivated / refunded). Re-sync from
+          // the SW, then re-apply — may unlock Pro themes or relock them.
+          refreshLicenseState().then(() => { if (typeof applySettings === 'function') applySettings(); });
         }
         if (msg.type === 'requestFileTree') {
           sendResponse({ data: [] });

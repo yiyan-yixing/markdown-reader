@@ -244,8 +244,9 @@
       sendMessageToActiveTab({ type: 'settingsUpdated', settings });
     });
 
-    // Theme buttons
+    // Theme buttons (free themes — Pro themes are gated by the license check below)
     document.querySelectorAll('.popup-theme-btn').forEach(btn => {
+      if (btn.classList.contains('popup-theme-pro-btn')) return; // handled by license gate
       btn.addEventListener('click', () => {
         settings.theme = btn.dataset.theme;
         document.querySelectorAll('.popup-theme-btn').forEach(b => {
@@ -444,5 +445,140 @@
         proceed();
       }
     });
+
+    // ── License (Markdown Reader Pro) ────────────────────────────────────
+    // License state lives in the SW (single source of truth, like the AI key).
+    // The popup only ever sees the status + Pro boolean — never the key value.
+    const LS_CHECKOUT_URL_POPUP = ''; // filled after LS product config (A1, Day 1)
+    const LS_PORTAL_URL_POPUP = 'https://yiyan-yixing.lemonsqueezy.com/my-orders';
+
+    const licenseEls = {
+      status: document.getElementById('licenseStatus'),
+      statusText: document.getElementById('licenseStatusText'),
+      form: document.getElementById('licenseForm'),
+      keyInput: document.getElementById('licenseKeyInput'),
+      keyToggle: document.getElementById('licenseKeyToggle'),
+      activateBtn: document.getElementById('licenseActivateBtn'),
+      deactivateBtn: document.getElementById('licenseDeactivateBtn'),
+      buyBtn: document.getElementById('licenseBuyBtn'),
+      portalLink: document.getElementById('licensePortalLink'),
+      proPicker: document.querySelector('.popup-theme-pro'),
+    };
+
+    function setLicenseStatus(state) {
+      const s = state.status;
+      const usage = (state.activation_usage != null && state.activation_limit)
+        ? '（' + state.activation_usage + '/' + state.activation_limit + ' 设备）' : '';
+      const map = {
+        active:       { cls: 'active',     text: '✓ Pro 已激活' + usage },
+        validating:   { cls: 'validating', text: '正在验证 License…' },
+        offline_grace:{ cls: 'offline',    text: '⚠ 无法联网验证 License，Pro 暂继续可用，联网后自动重校验' },
+        invalid:      { cls: 'invalid',    text: '✗ License 已失效（退款/封禁），免费版仍可使用' },
+      };
+      const meta = map[s] || { cls: 'unknown', text: state.isPro ? 'Pro 已激活' : '未激活 — 升级 Pro 解锁 4 款主题' };
+      if (licenseEls.status) licenseEls.status.className = 'popup-license-status popup-license-status--' + meta.cls;
+      if (licenseEls.statusText) licenseEls.statusText.textContent = meta.text;
+      // Hide manual entry form once Pro is on; show deactivate instead.
+      const isPro = !!state.isPro;
+      if (licenseEls.form) licenseEls.form.classList.toggle('popup-license-form--hidden', isPro);
+      if (licenseEls.deactivateBtn) licenseEls.deactivateBtn.style.display = isPro ? '' : 'none';
+      // Unlock/lock the Pro theme picker.
+      if (licenseEls.proPicker) licenseEls.proPicker.classList.toggle('popup-theme-pro-unlocked', isPro);
+      // Hide buy + portal once activated.
+      if (licenseEls.buyBtn) licenseEls.buyBtn.style.display = isPro ? 'none' : '';
+      if (licenseEls.portalLink) licenseEls.portalLink.style.display = isPro ? 'none' : '';
+      // Reflect current theme (incl. a Pro theme) on the picker buttons.
+      document.querySelectorAll('.popup-theme-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.theme === settings.theme);
+      });
+    }
+
+    function sendBackground(msg) {
+      return new Promise(resolve => {
+        try { chrome.runtime.sendMessage(msg, resolve); } catch (_) { resolve(null); }
+      });
+    }
+
+    async function refreshLicenseStatus() {
+      const state = await sendBackground({ type: 'licenseGetStatus' });
+      if (state) setLicenseStatus(state);
+    }
+
+    // Activate
+    if (licenseEls.activateBtn) {
+      licenseEls.activateBtn.addEventListener('click', async () => {
+        const key = licenseEls.keyInput ? licenseEls.keyInput.value.trim() : '';
+        if (!key) return;
+        licenseEls.activateBtn.disabled = true;
+        if (licenseEls.statusText) licenseEls.statusText.textContent = '正在激活…';
+        if (licenseEls.status) licenseEls.status.className = 'popup-license-status popup-license-status--validating';
+        const res = await sendBackground({ type: 'licenseActivate', license_key: key });
+        licenseEls.activateBtn.disabled = false;
+        if (res && res.success) {
+          if (licenseEls.keyInput) licenseEls.keyInput.value = '';
+          await refreshLicenseStatus();
+          sendMessageToActiveTab({ type: 'licenseUpdated' });
+        } else {
+          const err = (res && res.error) || '激活失败';
+          if (licenseEls.statusText) licenseEls.statusText.textContent = '✗ ' + err;
+          if (licenseEls.status) licenseEls.status.className = 'popup-license-status popup-license-status--invalid';
+        }
+      });
+    }
+
+    // Deactivate (free one of the 3 device slots)
+    if (licenseEls.deactivateBtn) {
+      licenseEls.deactivateBtn.addEventListener('click', async () => {
+        if (!confirm('停用此设备的 Pro 授权？这将释放一个设备槽位。')) return;
+        await sendBackground({ type: 'licenseDeactivate' });
+        await refreshLicenseStatus();
+        sendMessageToActiveTab({ type: 'licenseUpdated' });
+      });
+    }
+
+    // Show/hide license key (reuses the AI-key toggle pattern)
+    if (licenseEls.keyToggle) {
+      licenseEls.keyToggle.addEventListener('click', () => {
+        if (licenseEls.keyInput) licenseEls.keyInput.type = licenseEls.keyInput.type === 'password' ? 'text' : 'password';
+      });
+    }
+
+    // Buy → external LS checkout (Chrome policy: no in-extension payment iframe)
+    if (licenseEls.buyBtn) {
+      licenseEls.buyBtn.addEventListener('click', () => {
+        if (!LS_CHECKOUT_URL_POPUP) {
+          alert('升级链接待配置（LS 产品创建后填入，A1 Day 1 产物）。');
+          return;
+        }
+        if (chrome.tabs && chrome.tabs.create) chrome.tabs.create({ url: LS_CHECKOUT_URL_POPUP });
+      });
+    }
+    if (licenseEls.portalLink && LS_PORTAL_URL_POPUP) {
+      licenseEls.portalLink.href = LS_PORTAL_URL_POPUP;
+    }
+
+    // Pro theme buttons — gate on license. Locked click nudges to upgrade.
+    document.querySelectorAll('.popup-theme-pro-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const theme = btn.dataset.theme;
+        const state = await sendBackground({ type: 'licenseGetStatus' });
+        if (!state || !state.isPro) {
+          const sec = document.getElementById('popup-license-section');
+          if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (licenseEls.status) licenseEls.status.className = 'popup-license-status popup-license-status--unknown';
+          if (licenseEls.statusText) licenseEls.statusText.textContent = '🔒 这是 Pro 主题。激活 License 后解锁，或点击上方「升级 Pro」购买。';
+          return;
+        }
+        settings.theme = theme;
+        document.querySelectorAll('.popup-theme-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.theme === theme);
+        });
+        saveSettings(settings);
+        sendMessageToActiveTab({ type: 'settingsUpdated', settings });
+      });
+    });
+
+    // Initial status fetch (async, non-blocking)
+    refreshLicenseStatus();
   });
 })();

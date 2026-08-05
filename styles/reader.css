@@ -990,3 +990,154 @@
     word-break: break-word;
   }
 }
+
+/* ============================================================================
+ * Pro Themes — Markdown Reader Pro (license-gated)
+ *
+ * Added in v1.1.0. Each block overrides the --md-* color variables defined in
+ * :root above. Fonts / radii / side-width are inherited from :root (same as the
+ * built-in dark theme). ADR §6.5 plan A: zero manifest changes — content.js
+ * already does root.setAttribute('data-theme', theme), so these blocks light up
+ * automatically once the theme picker offers them.
+ *
+ * Gate: theme picker shows these with a lock badge; selecting one without an
+ * active Pro license redirects to the upgrade tab (popup.js isProEnabled()).
+ * ========================================================================== */
+
+/* ── Nord (arctic, north-bluish) ── */
+[data-theme="nord"] {
+  --md-bg: #2e3440;
+  --md-surface: #3b4252;
+  --md-surface-hover: #434c5e;
+  --md-border: #4c566a;
+  --md-text: #d8dee9;
+  --md-text-secondary: #eceff4;
+  --md-text-muted: #8a93a6;
+  --md-primary: #88c0d0;
+  --md-primary-hover: #8fbcbb;
+  --md-primary-alpha: rgba(136, 192, 208, 0.12);
+  --md-accent: #a3be8c;
+  --md-accent-hover: #b5cea8;
+  --md-highlight: #ebcb8b;
+  --md-highlight-current: #d08770;
+  --md-code-bg: #242933;
+  --md-code-text: #eceff4;
+  --md-inline-code-bg: #3b4252;
+  --md-toolbar-bg: #3b4252;
+  --md-sidebar-bg: #2e3440;
+  --md-sidebar-border: #3b4252;
+  --md-sidebar-shadow: 0 0 5px rgba(0,0,0,0.2), 0 0 20px rgba(0,0,0,0.5);
+  --md-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  --md-shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
+  --md-btn-color: rgba(216,222,233,0.4);
+  --md-btn-hover-color: rgba(216,222,233,0.7);
+  --md-btn-hover-bg: rgba(67,76,94,0.6);
+  --md-btn-active-color: rgba(216,222,233,0.7);
+  --md-btn-active-bg: rgba(67,76,94,0.4);
+}
+
+/* ── Solarized (warm, classic light) ── */
+[data-theme="solarized"] {
+  --md-bg: #fdf6e3;
+  --md-surface: #eee8d5;
+  --md-surface-hover: #e4dcc3;
+  --md-border: #93a1a1;
+  --md-text: #586e75;
+  --md-text-secondary: #657b83;
+  --md-text-muted: #93a1a1;
+  --md-primary: #268bd2;
+  --md-primary-hover: #1e6fa8;
+  --md-primary-alpha: rgba(38, 139, 210, 0.1);
+  --md-accent: #859900;
+  --md-accent-hover: #6f7f00;
+  --md-highlight: #b58900;
+  --md-highlight-current: #cb4b16;
+  --md-code-bg: #073642;
+  --md-code-text: #eee8d5;
+  --md-inline-code-bg: #eee8d5;
+  --md-toolbar-bg: #eee8d5;
+  --md-sidebar-bg: #eee8d5;
+  --md-sidebar-border: #93a1a1;
+  --md-sidebar-shadow: 0 0 5px rgba(101,123,131,0.08), 0 0 20px rgba(101,123,131,0.18);
+  --md-shadow: 0 1px 3px rgba(101,123,131,0.12);
+  --md-shadow-lg: 0 4px 12px rgba(101,123,131,0.18);
+  --md-btn-color: rgba(88,110,117,0.45);
+  --md-btn-hover-color: rgba(88,110,117,0.7);
+  --md-btn-hover-bg: rgba(238,232,213,0.9);
+  --md-btn-active-color: rgba(88,110,117,0.7);
+  --md-btn-active-bg: rgba(238,232,213,0.6);
+}
+
+/* ── Dracula (dark, high-contrast) ── */
+[data-theme="dracula"] {
+  --md-bg: #282a36;
+  --md-surface: #343746;
+  --md-surface-hover: #44475a;
+  --md-border: #6272a4;
+  --md-text: #f8f8f2;
+  --md-text-secondary: #e9e9f0;
+  --md-text-muted: #8489a8;
+  --md-primary: #bd93f9;
+  --md-primary-hover: #caa6ff;
+  --md-primary-alpha: rgba(189, 147, 249, 0.12);
+  --md-accent: #50fa7b;
+  --md-accent-hover: #73fb95;
+  --md-highlight: #f1fa8c;
+  --md-highlight-current: #ffb86c;
+  --md-code-bg: #21222c;
+  --md-code-text: #f8f8f2;
+  --md-inline-code-bg: #44475a;
+  --md-toolbar-bg: #343746;
+  --md-sidebar-bg: #21222c;
+  --md-sidebar-border: #343746;
+  --md-sidebar-shadow: 0 0 5px rgba(0,0,0,0.3), 0 0 20px rgba(0,0,0,0.5);
+  --md-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  --md-shadow-lg: 0 4px 12px rgba(0,0,0,0.5);
+  --md-btn-color: rgba(248,248,242,0.4);
+  --md-btn-hover-color: rgba(248,248,242,0.7);
+  --md-btn-hover-bg: rgba(68,71,90,0.6);
+  --md-btn-active-color: rgba(248,248,242,0.7);
+  --md-btn-active-bg: rgba(68,71,90,0.4);
+}
+
+/* ── Tokyo Night (dark, neon blue) ── */
+[data-theme="tokyo-night"] {
+  --md-bg: #1a1b26;
+  --md-surface: #24283b;
+  --md-surface-hover: #2e334d;
+  --md-border: #414868;
+  --md-text: #c0caf5;
+  --md-text-secondary: #a9b1d6;
+  --md-text-muted: #7a89b0;
+  --md-primary: #7aa2f7;
+  --md-primary-hover: #89b3fa;
+  --md-primary-alpha: rgba(122, 162, 247, 0.12);
+  --md-accent: #9ece6a;
+  --md-accent-hover: #b0d884;
+  --md-highlight: #e0af68;
+  --md-highlight-current: #bb9af7;
+  --md-code-bg: #16161e;
+  --md-code-text: #c0caf5;
+  --md-inline-code-bg: #2e334d;
+  --md-toolbar-bg: #24283b;
+  --md-sidebar-bg: #16161e;
+  --md-sidebar-border: #24283b;
+  --md-sidebar-shadow: 0 0 5px rgba(0,0,0,0.3), 0 0 20px rgba(0,0,0,0.6);
+  --md-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  --md-shadow-lg: 0 4px 12px rgba(0,0,0,0.55);
+  --md-btn-color: rgba(192,202,245,0.4);
+  --md-btn-hover-color: rgba(192,202,245,0.7);
+  --md-btn-hover-bg: rgba(46,51,77,0.6);
+  --md-btn-active-color: rgba(192,202,245,0.7);
+  --md-btn-active-bg: rgba(46,51,77,0.4);
+}
+
+/* Code block backgrounds for Pro themes (built-in themes/*.css only covers
+   light + dark). All Pro themes reuse --md-code-bg so this one rule covers them. */
+[data-theme="nord"] .hljs,
+[data-theme="solarized"] .hljs,
+[data-theme="dracula"] .hljs,
+[data-theme="tokyo-night"] .hljs {
+  background: var(--md-code-bg);
+  color: var(--md-code-text);
+}
