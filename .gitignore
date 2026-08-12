@@ -1,0 +1,5 @@
+# 依赖（绝不提交）
+node_modules/
+
+# macOS
+.DS_Store
