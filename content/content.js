@@ -28,50 +28,25 @@
     customCSS: '',
     allPlugins: true,
     pluginOptions: {},
+    // AI feature preferences live at the top level; the `ai` object below holds
+    // only the model connection (vendor / provider / baseUrl / model).
+    targetLang: '中文',
+    enableTranslate: true,
+    enableSummary: true,
     ai: {
       vendor: 'custom',
       provider: 'openai',
       baseUrl: '',
       model: '',
-      targetLang: '中文',
-      enableTranslate: true,
-      enableSummary: true,
       configured: false,
     },
   };
   let settings = { ...DEFAULTS };
 
-  // ── Pro theme gate (Markdown Reader Pro, v1.1.0) ──────────────────────
-  // Pro themes require an active license. The content script asks the SW
-  // (single source of truth) for the Pro boolean — never the license_key.
-  const PRO_THEMES = ['nord', 'solarized', 'dracula', 'tokyo-night'];
-  const FREE_FALLBACK_THEME = 'light';
-  let licenseState = { isPro: false, status: null };
-
+  // All 7 themes (Light / Indigo / Dark / Nord / Solarized / Dracula / Tokyo
+  // Night) are free since v1.2.0 — the saved theme is applied verbatim.
   function sanitizeTheme(theme) {
-    if (PRO_THEMES.indexOf(theme) !== -1 && !licenseState.isPro) {
-      return FREE_FALLBACK_THEME; // locked — fall back so a Pro theme never shows free
-    }
     return theme;
-  }
-
-  function refreshLicenseState() {
-    if (typeof chrome === 'undefined' || !chrome.runtime) return Promise.resolve();
-    return new Promise(resolve => {
-      try {
-        chrome.runtime.sendMessage({ type: 'licenseGetStatus' }, state => {
-          if (state) licenseState = state;
-          // Persist a fallback if a Pro theme is saved but the user isn't Pro.
-          if (PRO_THEMES.indexOf(settings.theme) !== -1 && !licenseState.isPro) {
-            settings.theme = FREE_FALLBACK_THEME;
-            try { chrome.storage.sync.set({ mdReaderSettings: settings }); } catch (_) {}
-          }
-          const root = document.getElementById('md-reader-root');
-          if (root) root.setAttribute('data-theme', sanitizeTheme(settings.theme));
-          resolve();
-        });
-      } catch (_) { resolve(); }
-    });
   }
 
   // ── Load settings from storage ──
@@ -81,6 +56,7 @@
         chrome.storage.sync.get('mdReaderSettings', result => {
           if (result.mdReaderSettings) {
             settings = { ...DEFAULTS, ...result.mdReaderSettings };
+            migrateSettings();
           }
           resolve(settings);
         });
@@ -88,6 +64,19 @@
         resolve(settings);
       }
     });
+  }
+
+  // v1.3.0: AI feature preferences (targetLang / enableTranslate / enableSummary)
+  // moved out of settings.ai.* to the top level — promote any old values so
+  // existing users keep their choices, then drop the stale keys.
+  function migrateSettings() {
+    const ai = settings.ai || {};
+    if (settings.targetLang === undefined && ai.targetLang !== undefined) settings.targetLang = ai.targetLang;
+    if (settings.enableTranslate === undefined && ai.enableTranslate !== undefined) settings.enableTranslate = ai.enableTranslate;
+    if (settings.enableSummary === undefined && ai.enableSummary !== undefined) settings.enableSummary = ai.enableSummary;
+    delete ai.targetLang;
+    delete ai.enableTranslate;
+    delete ai.enableSummary;
   }
 
   function saveSettings() {
@@ -320,8 +309,6 @@
     const root = document.createElement('div');
     root.id = 'md-reader-root';
     root.setAttribute('data-theme', sanitizeTheme(settings.theme));
-    // Sync Pro state from the SW (single source of truth) once the reader is up.
-    refreshLicenseState();
 
     const fileInfo = getCurrentFileInfo();
 
@@ -1037,19 +1024,21 @@ function buildOutline(container) {
     const list = document.getElementById('md-settings-list');
     if (!list) return;
 
-    // Read / write a toggle value, mapping the AI keys to settings.ai.*.
+    // Read / write a toggle value. AI feature prefs are top-level since v1.3.0.
     function getSetting(key) {
-      if (key === 'aiTranslate') return settings.ai && settings.ai.enableTranslate !== false;
-      if (key === 'aiSummary') return settings.ai && settings.ai.enableSummary !== false;
+      if (key === 'aiTranslate') return settings.enableTranslate !== false;
+      if (key === 'aiSummary') return settings.enableSummary !== false;
       return settings[key] !== false;
     }
     function setSetting(key, val) {
-      settings.ai = settings.ai || {};
-      if (key === 'aiTranslate') settings.ai.enableTranslate = val;
-      else if (key === 'aiSummary') settings.ai.enableSummary = val;
+      if (key === 'aiTranslate') settings.enableTranslate = val;
+      else if (key === 'aiSummary') settings.enableSummary = val;
       else settings[key] = val;
     }
 
+    // The AI feature prefs (划词翻译 / 总结 / 翻译目标语言) only appear after the
+    // model connection is configured — matching the popup's AI 助手 section.
+    const aiConfigured = !!(settings.ai && settings.ai.configured);
     const features = [
       { key: 'allPlugins', label: 'All Built-in Markdown Plugins', desc: 'Enable GFM tables, task lists, strikethrough, etc.' },
       { key: 'showOutline', label: 'Auto-generate Outline', desc: 'Automatically create table of contents from headings' },
@@ -1060,12 +1049,20 @@ function buildOutline(container) {
       { key: 'fontSize', label: 'Adjust Font', desc: 'Change font size in pixels', type: 'number' },
       { key: 'showFileTree', label: 'Folder Directory', desc: 'Show file tree sidebar' },
       { key: 'pluginOptions', label: 'Markdown plugin options', desc: 'Configure individual markdown extensions' },
-      { key: 'aiTranslate', label: 'AI 划词翻译', desc: '选中文字后点「翻译」（需在弹窗配置模型）' },
-      { key: 'aiSummary', label: 'AI 总结', desc: '选中段落或点工具栏「✨」总结全文' },
-      { key: 'aiTargetLang', label: 'AI 翻译目标语言', desc: '划词翻译输出语言', type: 'aiLang' },
-      { key: 'aiConfigInfo', label: 'AI 模型配置', desc: 'Provider / Base URL / API Key / 模型名 请在扩展弹窗「AI 助手」中填写', type: 'info' },
-      { key: 'moreFeatures', label: 'More Features in Development', desc: 'Stay tuned for updates!', type: 'info' },
     ];
+    if (aiConfigured) {
+      features.push(
+        { key: 'aiTranslate', label: 'AI 划词翻译', desc: '选中文字后点「翻译」' },
+        { key: 'aiSummary', label: 'AI 总结', desc: '选中段落或点工具栏「✨」总结全文' },
+        { key: 'aiTargetLang', label: 'AI 翻译目标语言', desc: '划词翻译输出语言', type: 'aiLang' },
+      );
+    }
+    features.push(
+      { key: 'aiConfigInfo', label: 'AI 模型配置', desc: aiConfigured
+        ? '已配置模型，可在扩展弹窗「AI 助手」中修改'
+        : 'Provider / Base URL / API Key / 模型名 请在扩展弹窗「AI 助手」中填写', type: 'info' },
+      { key: 'moreFeatures', label: 'More Features in Development', desc: 'Stay tuned for updates!', type: 'info' },
+    );
 
     list.innerHTML = '';
 
@@ -1104,7 +1101,7 @@ function buildOutline(container) {
           </div>
         `;
       } else if (f.type === 'aiLang') {
-        const cur = (settings.ai && settings.ai.targetLang) || '中文';
+        const cur = settings.targetLang || '中文';
         const langs = ['中文', 'English', '日本語', '한국어', 'Français', 'Deutsch', 'Español'];
         const opts = langs.map(l => '<option' + (l === cur ? ' selected' : '') + '>' + l + '</option>').join('');
         row.innerHTML = `
@@ -1150,8 +1147,7 @@ function buildOutline(container) {
     // AI target-language selector
     list.querySelectorAll('[data-ai-lang]').forEach(sel => {
       sel.addEventListener('change', () => {
-        settings.ai = settings.ai || {};
-        settings.ai.targetLang = sel.value;
+        settings.targetLang = sel.value;
         saveSettings();
         applySettings();
       });
@@ -1300,7 +1296,8 @@ function buildOutline(container) {
           break;
 
         case 'toggle-theme': {
-          settings.theme = settings.theme === 'light' ? 'dark' : 'light';
+          // 亮系主题（light / light-indigo）↔ dark 二段切换
+          settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
           root.setAttribute('data-theme', sanitizeTheme(settings.theme));
           saveSettings();
           break;
@@ -1333,6 +1330,9 @@ function buildOutline(container) {
         }
 
         case 'open-settings':
+          // Rebuild the rows so the AI prefs appear once the model is configured
+          // (the initial build runs before reconcileAIConfig resolves).
+          buildSettingsPanel();
           document.getElementById('md-settings-panel').style.display = '';
           break;
 
@@ -1666,8 +1666,8 @@ function buildOutline(container) {
       return;
     }
 
-    const showTranslate = ai.enableTranslate !== false;
-    const showSummary = ai.enableSummary !== false;
+    const showTranslate = settings.enableTranslate !== false;
+    const showSummary = settings.enableSummary !== false;
     if (!showTranslate && !showSummary) { aiHidePopover(); return; }
 
     if (actions) {
@@ -1732,7 +1732,7 @@ function buildOutline(container) {
   }
 
   function aiBuildMessages(task, text, mode) {
-    const lang = (settings.ai && settings.ai.targetLang) || '中文';
+    const lang = settings.targetLang || '中文';
     const body = String(text || '');
 
     if (task === 'translate') {
@@ -2019,11 +2019,6 @@ function buildOutline(container) {
           applySettings();
           // Re-derive "configured" from the SW — don't trust the broadcasted flag.
           reconcileAIConfig();
-        }
-        if (msg.type === 'licenseUpdated') {
-          // Pro state changed (activated / deactivated / refunded). Re-sync from
-          // the SW, then re-apply — may unlock Pro themes or relock them.
-          refreshLicenseState().then(() => { if (typeof applySettings === 'function') applySettings(); });
         }
         if (msg.type === 'requestFileTree') {
           sendResponse({ data: [] });

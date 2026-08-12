@@ -44,22 +44,17 @@ make the user's own local software interoperable with the extension.
 ### `storage`
 
 Stores user preferences (theme, font size, feature toggles) and the user's own
-AI API key + Pro license key — all locally (`chrome.storage.local` /
-`chrome.storage.sync`). Nothing is uploaded to any server we operate.
+AI API key — all locally (`chrome.storage.local` / `chrome.storage.sync`).
+Nothing is uploaded to any server we operate.
 
 ### `activeTab`, `scripting`, `sidePanel`
 
 Used to render the reader UI in the active tab when the user opens a Markdown
 file, and to show the optional file-tree side panel.
 
-### `host_permissions` (raw.githubusercontent / gitlab / bitbucket / file:// / api.lemonsqueezy.com)
+### `host_permissions` (raw.githubusercontent / gitlab / bitbucket / file://)
 
-Used only to fetch raw Markdown text from those hosts so it can be rendered,
-plus `api.lemonsqueezy.com` — used **exclusively** by the Pro license
-activate/validate flow (v1.1.0). The extension calls LemonSqueezy's public
-License API directly (no server of ours is involved) to activate and validate
-the $2.99 one-time Pro license key that the user pastes. No other LS endpoint
-is used; no user data beyond the license key + a device instance id is sent.
+Used only to fetch raw Markdown text from those hosts so it can be rendered.
 
 ### `optional_host_permissions` (http://*/*, https://*/*)
 
@@ -70,18 +65,8 @@ otherwise.
 ## Data usage disclosure (Chrome Web Store "Privacy practices")
 
 - **Personally identifiable data collected:** None.
-- **Authentication data collected:** None (the user's AI API key and Pro
-  license key are stored locally and transmitted only to the provider the user
-  themselves configured — LemonSqueezy for the license, the user's chosen model
-  endpoint for AI).
+- **Authentication data collected:** None (the user's AI API key is stored
+  locally and transmitted only to the model provider the user configured).
 - **Personal communications:** None.
 - **Analytics / tracking:** None.
 - **Cryptocurrency mining:** None.
-
-## Pro feature note (new in v1.1.0)
-
-v1.1.0 adds **Markdown Reader Pro** — 4 additional color themes unlocked by a
-$2.99 one-time license key (verified via LemonSqueezy, the Merchant of Record).
-The license check adds no new permissions and does not change the single
-purpose. License keys are validated directly against LemonSqueezy's public API;
-no backend of ours is involved.

@@ -5,6 +5,8 @@
 
 A Chrome extension that renders `.md` files in a beautiful three-panel reading interface — file tree on the left, rendered content in the center, and outline (TOC) on the right.
 
+![Markdown Reader](docs/screenshot.png)
+
 **Smart mode — knows when to auto-activate:**
 
 | URL type | Behavior | Why |

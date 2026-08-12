@@ -16,14 +16,16 @@
     autoRefresh: false,
     customCSS: '',
     allPlugins: true,
+    // AI feature preferences are top-level (v1.3.0); the `ai` object holds only
+    // the model connection (vendor / provider / baseUrl / model).
+    targetLang: '中文',
+    enableTranslate: true,
+    enableSummary: true,
     ai: {
       vendor: 'custom',
       provider: 'openai',
       baseUrl: '',
       model: '',
-      targetLang: '中文',
-      enableTranslate: true,
-      enableSummary: true,
       configured: false,
     },
   };
@@ -68,6 +70,14 @@
   function loadSettings(cb) {
     chrome.storage.sync.get('mdReaderSettings', result => {
       const settings = { ...DEFAULTS, ...(result.mdReaderSettings || {}) };
+      // v1.3.0: AI feature prefs moved out of settings.ai.* to the top level.
+      const ai = settings.ai || {};
+      if (settings.targetLang === undefined && ai.targetLang !== undefined) settings.targetLang = ai.targetLang;
+      if (settings.enableTranslate === undefined && ai.enableTranslate !== undefined) settings.enableTranslate = ai.enableTranslate;
+      if (settings.enableSummary === undefined && ai.enableSummary !== undefined) settings.enableSummary = ai.enableSummary;
+      delete ai.targetLang;
+      delete ai.enableTranslate;
+      delete ai.enableSummary;
       cb(settings);
     });
   }
@@ -89,6 +99,18 @@
         }
       });
     });
+  }
+
+  // Settings changes must reach EVERY open reader tab instantly (no manual
+  // refresh). Route through the service worker, which broadcasts to all tabs.
+  // `sendMessageToActiveTab` is only for active-tab actions (getPageType /
+  // activateReader); settings updates go wide.
+  // `settings` is passed explicitly — it only exists inside the loadSettings
+  // callback, so a module-level reference would throw a ReferenceError here.
+  function broadcastSettings(settings) {
+    try {
+      chrome.runtime.sendMessage({ type: 'settingsUpdated', settings }).catch(() => {});
+    } catch (_) {}
   }
 
   // Detect current tab state
@@ -176,8 +198,8 @@
 
       let isOn;
       if (key === 'autoRefresh') isOn = settings.autoRefresh;
-      else if (key === 'aiTranslate') isOn = settings.ai && settings.ai.enableTranslate;
-      else if (key === 'aiSummary') isOn = settings.ai && settings.ai.enableSummary;
+      else if (key === 'aiTranslate') isOn = settings.enableTranslate !== false;
+      else if (key === 'aiSummary') isOn = settings.enableSummary !== false;
       else isOn = settings[key] !== false;
       el.classList.toggle('unchecked', !isOn);
     });
@@ -202,6 +224,8 @@
 
       feature.addEventListener('click', () => {
         const key = feature.dataset.key;
+        // aiTargetLang is a preference select, not a toggle — skip it.
+        if (key === 'aiTargetLang') return;
         const isCurrentlyOn = !check.classList.contains('unchecked');
         check.classList.toggle('unchecked', isCurrentlyOn);
 
@@ -210,15 +234,15 @@
         } else if (key === 'customWidth') {
           settings.customWidth = !isCurrentlyOn;
         } else if (key === 'aiTranslate') {
-          settings.ai.enableTranslate = !isCurrentlyOn;
+          settings.enableTranslate = !isCurrentlyOn;
         } else if (key === 'aiSummary') {
-          settings.ai.enableSummary = !isCurrentlyOn;
+          settings.enableSummary = !isCurrentlyOn;
         } else {
           settings[key] = !isCurrentlyOn;
         }
 
         saveSettings(settings);
-        sendMessageToActiveTab({ type: 'settingsUpdated', settings });
+        broadcastSettings(settings);
       });
     });
 
@@ -227,45 +251,52 @@
       settings.fontSize = Math.max(12, settings.fontSize - 1);
       document.getElementById('fontSizeDisplay').textContent = settings.fontSize;
       saveSettings(settings);
-      sendMessageToActiveTab({ type: 'settingsUpdated', settings });
+      broadcastSettings(settings);
     });
 
     document.getElementById('fontInc')?.addEventListener('click', () => {
       settings.fontSize = Math.min(28, settings.fontSize + 1);
       document.getElementById('fontSizeDisplay').textContent = settings.fontSize;
       saveSettings(settings);
-      sendMessageToActiveTab({ type: 'settingsUpdated', settings });
+      broadcastSettings(settings);
     });
 
     // Content width
     document.getElementById('contentWidth')?.addEventListener('change', e => {
       settings.contentWidth = parseInt(e.target.value) || 800;
       saveSettings(settings);
-      sendMessageToActiveTab({ type: 'settingsUpdated', settings });
+      broadcastSettings(settings);
     });
 
-    // Theme buttons (free themes — Pro themes are gated by the license check below)
+    // Theme buttons — all 7 themes are free and apply directly
     document.querySelectorAll('.popup-theme-btn').forEach(btn => {
-      if (btn.classList.contains('popup-theme-pro-btn')) return; // handled by license gate
       btn.addEventListener('click', () => {
         settings.theme = btn.dataset.theme;
         document.querySelectorAll('.popup-theme-btn').forEach(b => {
           b.classList.toggle('active', b.dataset.theme === settings.theme);
         });
         saveSettings(settings);
-        sendMessageToActiveTab({ type: 'settingsUpdated', settings });
+        broadcastSettings(settings);
       });
     });
 
-    // ── AI assistant config ──
+    // ── AI assistant config (model connection only — feature prefs like
+    //    targetLang / enableTranslate / enableSummary live at the top level) ──
     settings.ai = settings.ai || {};
+
+    // Show the AI feature prefs (translate / summary / target language) only
+    // after the model connection is configured.
+    function syncAIFeatures() {
+      const el = document.getElementById('popup-ai-features');
+      if (el) el.style.display = settings.ai.configured ? '' : 'none';
+    }
+
     const aiEl = {
       vendor: document.getElementById('aiVendor'),
       provider: document.getElementById('aiProvider'),
       baseUrl: document.getElementById('aiBaseUrl'),
       apiKey: document.getElementById('aiApiKey'),
       model: document.getElementById('aiModel'),
-      targetLang: document.getElementById('aiTargetLang'),
     };
 
     // Populate the vendor preset dropdown from the AI_VENDORS map.
@@ -288,13 +319,17 @@
           settings.ai.configured = configured;
           saveSettings(settings);
         }
+        syncAIFeatures();
       });
     }
 
     if (aiEl.provider) aiEl.provider.value = settings.ai.provider || 'openai';
     if (aiEl.baseUrl) aiEl.baseUrl.value = settings.ai.baseUrl || '';
     if (aiEl.model) aiEl.model.value = settings.ai.model || '';
-    if (aiEl.targetLang) aiEl.targetLang.value = settings.ai.targetLang || '中文';
+
+    // Translation target language — top-level preference (Feature Settings).
+    const targetLangSel = document.getElementById('aiTargetLang');
+    if (targetLangSel) targetLangSel.value = settings.targetLang || '中文';
     {
       const v0 = AI_VENDORS[(settings.ai && settings.ai.vendor) || 'custom'] || AI_VENDORS.custom;
       if (aiEl.model) aiEl.model.placeholder = v0.modelHint || 'model name';
@@ -313,9 +348,8 @@
       settings.ai.provider = aiEl.provider.value;
       settings.ai.baseUrl = (aiEl.baseUrl.value || '').trim();
       settings.ai.model = (aiEl.model.value || '').trim();
-      settings.ai.targetLang = aiEl.targetLang.value;
       saveSettings(settings);
-      sendMessageToActiveTab({ type: 'settingsUpdated', settings });
+      broadcastSettings(settings);
     }
 
     async function maybeRequestHostPermission(baseUrl) {
@@ -350,7 +384,13 @@
       await maybeRequestHostPermission(typed);
     });
     aiEl.model?.addEventListener('change', saveAINonSecret);
-    aiEl.targetLang?.addEventListener('change', saveAINonSecret);
+
+    // Top-level AI feature preference — the select lives in the AI 助手 section.
+    targetLangSel?.addEventListener('change', () => {
+      settings.targetLang = targetLangSel.value;
+      saveSettings(settings);
+      broadcastSettings(settings);
+    });
 
     // API key → local storage only (never put in sync / broadcasts)
     aiEl.apiKey?.addEventListener('change', () => {
@@ -358,7 +398,8 @@
       const finalize = () => {
         settings.ai.configured = !!key;
         saveSettings(settings);
-        sendMessageToActiveTab({ type: 'settingsUpdated', settings });
+        broadcastSettings(settings);
+        syncAIFeatures();
       };
       if (chrome.storage && chrome.storage.local) {
         chrome.storage.local.set({ mdReaderApiKey: key }, finalize);
@@ -435,7 +476,8 @@
         if (settings.ai.configured !== configured) {
           settings.ai.configured = configured;
           saveSettings(settings);
-          sendMessageToActiveTab({ type: 'settingsUpdated', settings });
+          broadcastSettings(settings);
+          syncAIFeatures();
         }
         runTest();
       };
@@ -446,139 +488,5 @@
       }
     });
 
-    // ── License (Markdown Reader Pro) ────────────────────────────────────
-    // License state lives in the SW (single source of truth, like the AI key).
-    // The popup only ever sees the status + Pro boolean — never the key value.
-    const LS_CHECKOUT_URL_POPUP = ''; // filled after LS product config (A1, Day 1)
-    const LS_PORTAL_URL_POPUP = 'https://yiyan-yixing.lemonsqueezy.com/my-orders';
-
-    const licenseEls = {
-      status: document.getElementById('licenseStatus'),
-      statusText: document.getElementById('licenseStatusText'),
-      form: document.getElementById('licenseForm'),
-      keyInput: document.getElementById('licenseKeyInput'),
-      keyToggle: document.getElementById('licenseKeyToggle'),
-      activateBtn: document.getElementById('licenseActivateBtn'),
-      deactivateBtn: document.getElementById('licenseDeactivateBtn'),
-      buyBtn: document.getElementById('licenseBuyBtn'),
-      portalLink: document.getElementById('licensePortalLink'),
-      proPicker: document.querySelector('.popup-theme-pro'),
-    };
-
-    function setLicenseStatus(state) {
-      const s = state.status;
-      const usage = (state.activation_usage != null && state.activation_limit)
-        ? '（' + state.activation_usage + '/' + state.activation_limit + ' 设备）' : '';
-      const map = {
-        active:       { cls: 'active',     text: '✓ Pro 已激活' + usage },
-        validating:   { cls: 'validating', text: '正在验证 License…' },
-        offline_grace:{ cls: 'offline',    text: '⚠ 无法联网验证 License，Pro 暂继续可用，联网后自动重校验' },
-        invalid:      { cls: 'invalid',    text: '✗ License 已失效（退款/封禁），免费版仍可使用' },
-      };
-      const meta = map[s] || { cls: 'unknown', text: state.isPro ? 'Pro 已激活' : '未激活 — 升级 Pro 解锁 4 款主题' };
-      if (licenseEls.status) licenseEls.status.className = 'popup-license-status popup-license-status--' + meta.cls;
-      if (licenseEls.statusText) licenseEls.statusText.textContent = meta.text;
-      // Hide manual entry form once Pro is on; show deactivate instead.
-      const isPro = !!state.isPro;
-      if (licenseEls.form) licenseEls.form.classList.toggle('popup-license-form--hidden', isPro);
-      if (licenseEls.deactivateBtn) licenseEls.deactivateBtn.style.display = isPro ? '' : 'none';
-      // Unlock/lock the Pro theme picker.
-      if (licenseEls.proPicker) licenseEls.proPicker.classList.toggle('popup-theme-pro-unlocked', isPro);
-      // Hide buy + portal once activated.
-      if (licenseEls.buyBtn) licenseEls.buyBtn.style.display = isPro ? 'none' : '';
-      if (licenseEls.portalLink) licenseEls.portalLink.style.display = isPro ? 'none' : '';
-      // Reflect current theme (incl. a Pro theme) on the picker buttons.
-      document.querySelectorAll('.popup-theme-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.theme === settings.theme);
-      });
-    }
-
-    function sendBackground(msg) {
-      return new Promise(resolve => {
-        try { chrome.runtime.sendMessage(msg, resolve); } catch (_) { resolve(null); }
-      });
-    }
-
-    async function refreshLicenseStatus() {
-      const state = await sendBackground({ type: 'licenseGetStatus' });
-      if (state) setLicenseStatus(state);
-    }
-
-    // Activate
-    if (licenseEls.activateBtn) {
-      licenseEls.activateBtn.addEventListener('click', async () => {
-        const key = licenseEls.keyInput ? licenseEls.keyInput.value.trim() : '';
-        if (!key) return;
-        licenseEls.activateBtn.disabled = true;
-        if (licenseEls.statusText) licenseEls.statusText.textContent = '正在激活…';
-        if (licenseEls.status) licenseEls.status.className = 'popup-license-status popup-license-status--validating';
-        const res = await sendBackground({ type: 'licenseActivate', license_key: key });
-        licenseEls.activateBtn.disabled = false;
-        if (res && res.success) {
-          if (licenseEls.keyInput) licenseEls.keyInput.value = '';
-          await refreshLicenseStatus();
-          sendMessageToActiveTab({ type: 'licenseUpdated' });
-        } else {
-          const err = (res && res.error) || '激活失败';
-          if (licenseEls.statusText) licenseEls.statusText.textContent = '✗ ' + err;
-          if (licenseEls.status) licenseEls.status.className = 'popup-license-status popup-license-status--invalid';
-        }
-      });
-    }
-
-    // Deactivate (free one of the 3 device slots)
-    if (licenseEls.deactivateBtn) {
-      licenseEls.deactivateBtn.addEventListener('click', async () => {
-        if (!confirm('停用此设备的 Pro 授权？这将释放一个设备槽位。')) return;
-        await sendBackground({ type: 'licenseDeactivate' });
-        await refreshLicenseStatus();
-        sendMessageToActiveTab({ type: 'licenseUpdated' });
-      });
-    }
-
-    // Show/hide license key (reuses the AI-key toggle pattern)
-    if (licenseEls.keyToggle) {
-      licenseEls.keyToggle.addEventListener('click', () => {
-        if (licenseEls.keyInput) licenseEls.keyInput.type = licenseEls.keyInput.type === 'password' ? 'text' : 'password';
-      });
-    }
-
-    // Buy → external LS checkout (Chrome policy: no in-extension payment iframe)
-    if (licenseEls.buyBtn) {
-      licenseEls.buyBtn.addEventListener('click', () => {
-        if (!LS_CHECKOUT_URL_POPUP) {
-          alert('升级链接待配置（LS 产品创建后填入，A1 Day 1 产物）。');
-          return;
-        }
-        if (chrome.tabs && chrome.tabs.create) chrome.tabs.create({ url: LS_CHECKOUT_URL_POPUP });
-      });
-    }
-    if (licenseEls.portalLink && LS_PORTAL_URL_POPUP) {
-      licenseEls.portalLink.href = LS_PORTAL_URL_POPUP;
-    }
-
-    // Pro theme buttons — gate on license. Locked click nudges to upgrade.
-    document.querySelectorAll('.popup-theme-pro-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const theme = btn.dataset.theme;
-        const state = await sendBackground({ type: 'licenseGetStatus' });
-        if (!state || !state.isPro) {
-          const sec = document.getElementById('popup-license-section');
-          if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          if (licenseEls.status) licenseEls.status.className = 'popup-license-status popup-license-status--unknown';
-          if (licenseEls.statusText) licenseEls.statusText.textContent = '🔒 这是 Pro 主题。激活 License 后解锁，或点击上方「升级 Pro」购买。';
-          return;
-        }
-        settings.theme = theme;
-        document.querySelectorAll('.popup-theme-btn').forEach(b => {
-          b.classList.toggle('active', b.dataset.theme === theme);
-        });
-        saveSettings(settings);
-        sendMessageToActiveTab({ type: 'settingsUpdated', settings });
-      });
-    });
-
-    // Initial status fetch (async, non-blocking)
-    refreshLicenseStatus();
   });
 })();

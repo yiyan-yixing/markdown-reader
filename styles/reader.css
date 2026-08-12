@@ -75,6 +75,39 @@
   --md-btn-active-bg: rgba(58,60,62,0.3);
 }
 
+/* ── Light · Indigo (free) ── 白底 + 靛蓝主色 + 红色点缀（董事长采样配色） */
+[data-theme="light-indigo"] {
+  --md-bg: #ffffff;
+  --md-surface: #ffffff;
+  --md-surface-hover: #f3f4ff;
+  --md-border: #e3e5f0;
+  --md-text: #1f2933;
+  --md-text-secondary: #5a6270;
+  --md-text-muted: #9099a8;
+  --md-primary: #607cd2;
+  --md-primary-hover: #4c68bb;
+  --md-primary-alpha: rgba(96, 124, 210, 0.12);
+  --md-accent: #fa5151;
+  --md-accent-hover: #e04343;
+  --md-highlight: #fff07e;
+  --md-highlight-current: #f6bb42;
+  --md-code-bg: #2a3148;
+  --md-code-text: #e6eaf3;
+  --md-inline-code-bg: #eef2fd;
+  --md-toolbar-bg: #f3f4ff;
+  --md-sidebar-bg: #f3f4ff;
+  --md-sidebar-border: #e3e5f0;
+  --md-sidebar-shadow: 0 0 5px rgba(96,124,210,0.04), 0 0 20px rgba(96,124,210,0.12);
+  --md-shadow: 0 1px 3px rgba(20,30,60,0.06);
+  --md-shadow-lg: 0 4px 12px rgba(20,30,60,0.10);
+  --md-btn-color: rgba(96,124,210,0.45);
+  --md-btn-bg: none;
+  --md-btn-hover-color: rgba(96,124,210,0.65);
+  --md-btn-hover-bg: rgba(243,244,255,0.8);
+  --md-btn-active-color: rgba(96,124,210,0.65);
+  --md-btn-active-bg: rgba(243,244,255,0.5);
+}
+
 /* ── Reset ── */
 #md-reader-root {
   position: fixed;
@@ -992,16 +1025,12 @@
 }
 
 /* ============================================================================
- * Pro Themes — Markdown Reader Pro (license-gated)
+ * Additional Themes — free since v1.2.0
  *
- * Added in v1.1.0. Each block overrides the --md-* color variables defined in
- * :root above. Fonts / radii / side-width are inherited from :root (same as the
- * built-in dark theme). ADR §6.5 plan A: zero manifest changes — content.js
- * already does root.setAttribute('data-theme', theme), so these blocks light up
- * automatically once the theme picker offers them.
- *
- * Gate: theme picker shows these with a lock badge; selecting one without an
- * active Pro license redirects to the upgrade tab (popup.js isProEnabled()).
+ * Each block overrides the --md-* color variables defined in :root above.
+ * Fonts / radii / side-width are inherited from :root (same as the built-in
+ * dark theme). content.js applies root.setAttribute('data-theme', theme), so
+ * these blocks light up automatically once the theme picker offers them.
  * ========================================================================== */
 
 /* ── Nord (arctic, north-bluish) ── */
@@ -1133,11 +1162,13 @@
 }
 
 /* Code block backgrounds for Pro themes (built-in themes/*.css only covers
-   light + dark). All Pro themes reuse --md-code-bg so this one rule covers them. */
+   light + dark). All Pro themes reuse --md-code-bg so this one rule covers them.
+   light-indigo 同样复用 --md-code-bg（免费主题，深靛蓝代码井）。 */
 [data-theme="nord"] .hljs,
 [data-theme="solarized"] .hljs,
 [data-theme="dracula"] .hljs,
-[data-theme="tokyo-night"] .hljs {
+[data-theme="tokyo-night"] .hljs,
+[data-theme="light-indigo"] .hljs {
   background: var(--md-code-bg);
   color: var(--md-code-text);
 }

@@ -26,6 +26,8 @@
  *   [19] Popup AI vendor preset auto-fills config
  *   [20] Not-configured shows banner + toolbar config button
  *   [21] Single-word translate uses dictionary prompt
+ *   [22] Popup AI feature prefs appear only after model config
+ *   [23] In-page settings shows AI prefs only when configured
  *
  *  Every failure saves a screenshot to tests/screenshots/.
  * ========================================================================== */
@@ -434,6 +436,59 @@ async function main() {
   });
 
   // =====================================================================
+  //  07b  Light-Indigo theme (free) — white + indigo + red
+  // =====================================================================
+  await runTest('07b. Light-Indigo theme is free and renders white+indigo+red', async function () {
+    var p = await context.newPage();
+    await prepareReaderPage(p, { theme: 'light-indigo' });
+    await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('#md-reader-root', { timeout: 10000 });
+    await injectCSS(p);
+    await p.waitForTimeout(200);
+
+    // All themes are free since v1.2.0 — applied verbatim (no license gate).
+    var theme = await p.getAttribute('#md-reader-root', 'data-theme');
+    if (theme !== 'light-indigo') throw new Error('Expected data-theme=light-indigo, got "' + theme + '"');
+
+    var rootStyle = await p.evaluate(function () {
+      var root = document.getElementById('md-reader-root');
+      var cs = getComputedStyle(root);
+      return {
+        bg: cs.backgroundColor,
+        primary: cs.getPropertyValue('--md-primary').trim(),
+        accent: cs.getPropertyValue('--md-accent').trim(),
+      };
+    });
+    if (rootStyle.bg !== 'rgb(255, 255, 255)') throw new Error('Expected white bg, got ' + rootStyle.bg);
+    if (rootStyle.primary !== '#607cd2') throw new Error('Expected --md-primary #607cd2, got ' + rootStyle.primary);
+    if (rootStyle.accent !== '#fa5151') throw new Error('Expected --md-accent #fa5151, got ' + rootStyle.accent);
+
+    await p.close();
+  });
+
+  // =====================================================================
+  //  07c  Former Pro themes are free — apply verbatim, no license gate
+  // =====================================================================
+  var FORMER_PRO_THEMES = ['nord', 'solarized', 'dracula', 'tokyo-night'];
+  for (var ti = 0; ti < FORMER_PRO_THEMES.length; ti++) {
+    await runTest('07c.' + (ti + 1) + '. Theme "' + FORMER_PRO_THEMES[ti] + '" applies free (v1.2.0)', async function () {
+      var theme = FORMER_PRO_THEMES[ti];
+      var p = await context.newPage();
+      await prepareReaderPage(p, { theme: theme });
+      await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+      await p.waitForSelector('#md-reader-root', { timeout: 10000 });
+      await injectCSS(p);
+      await p.waitForTimeout(200);
+
+      // No license → the theme must still apply (previously fell back to 'light').
+      var applied = await p.getAttribute('#md-reader-root', 'data-theme');
+      if (applied !== theme) throw new Error('Expected data-theme=' + theme + ', got "' + applied + '"');
+
+      await p.close();
+    });
+  }
+
+  // =====================================================================
   //  08  Font size
   // =====================================================================
   await runTest('08. Font size A+ / A-', async function () {
@@ -497,7 +552,13 @@ async function main() {
       if (feat.length < 5) throw new Error('Expected >=5 features, got ' + feat.length);
 
       var btns = await popup.$$('.popup-theme-btn');
-      if (btns.length < 2) throw new Error('Expected >=2 theme buttons');
+      if (btns.length !== 7) throw new Error('Expected 7 theme buttons (all free since v1.2.0), got ' + btns.length);
+
+      var proBadges = await popup.$$('.popup-pro-badge');
+      if (proBadges.length !== 0) throw new Error('Pro badges should be gone, got ' + proBadges.length);
+
+      var licenseForm = await popup.$('#licenseForm');
+      if (licenseForm) throw new Error('License form should be removed, but found #licenseForm');
 
       var ver = await popup.textContent('.popup-version');
       if (!ver || !ver.trim()) throw new Error('Version missing');
@@ -739,7 +800,7 @@ async function main() {
   // =====================================================================
   await runTest('16. AI summarize-all streams into result panel', async function () {
     var p = await context.newPage();
-    await prepareReaderPage(p, { ai: { configured: true, model: 'gpt-4o-mini', enableTranslate: true, enableSummary: true, targetLang: '中文' } });
+    await prepareReaderPage(p, { ai: { configured: true, model: 'gpt-4o-mini' }, enableTranslate: true, enableSummary: true, targetLang: '中文' });
     await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
     await p.waitForSelector('#md-reader-root', { timeout: 10000 });
     await injectCSS(p);
@@ -761,7 +822,7 @@ async function main() {
   // =====================================================================
   await runTest('17. AI selection popover → translate', async function () {
     var p = await context.newPage();
-    await prepareReaderPage(p, { ai: { configured: true, model: 'gpt-4o-mini', enableTranslate: true, enableSummary: true, targetLang: '中文' } });
+    await prepareReaderPage(p, { ai: { configured: true, model: 'gpt-4o-mini' }, enableTranslate: true, enableSummary: true, targetLang: '中文' });
     await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
     await p.waitForSelector('.md-content-inner', { timeout: 10000 });
     await injectCSS(p);
@@ -905,7 +966,7 @@ async function main() {
   // =====================================================================
   await runTest('21. Single-word translate uses dictionary prompt', async function () {
     var p = await context.newPage();
-    await prepareReaderPage(p, { ai: { configured: true, model: 'gpt-4o-mini', enableTranslate: true, enableSummary: true, targetLang: '中文' } });
+    await prepareReaderPage(p, { ai: { configured: true, model: 'gpt-4o-mini' }, enableTranslate: true, enableSummary: true, targetLang: '中文' });
     await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
     await p.waitForSelector('.md-content-inner', { timeout: 10000 });
     await injectCSS(p);
@@ -938,6 +999,125 @@ async function main() {
     var word = await p.evaluate(function () { return window.__mdLastAiMsg.messages[1].content; });
     if (!/^[A-Za-z]+$/.test(word)) throw new Error('Expected a single word as user content, got "' + word + '"');
     await p.close();
+  });
+
+  // =====================================================================
+  //  22  Popup AI feature prefs gated on model config
+  // =====================================================================
+  await runTest('22. Popup AI feature prefs appear only after model config', async function () {
+    async function buildPopup(seedKey) {
+      var popup = await context.newPage();
+      await popup.addInitScript({ content: makeChromeMock({ ai: { configured: false } }) });
+      if (seedKey) {
+        // Seed the mock's local storage with an API key → popup derives configured=true.
+        await popup.addInitScript({ content: 'window.chrome.storage.local._d.mdReaderApiKey = "sk-seeded";' });
+      }
+      var popupHtml = fs.readFileSync(path.join(ROOT_DIR, 'popup/popup.html'), 'utf-8');
+      var popupCss = fs.readFileSync(path.join(ROOT_DIR, 'popup/popup.css'), 'utf-8');
+      var popupJs = fs.readFileSync(path.join(ROOT_DIR, 'popup/popup.js'), 'utf-8');
+      var inlineHtml =
+        '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' + popupCss + '</style></head>' +
+        '<body>' + popupHtml
+          .replace(/<link rel="stylesheet" href="popup\.css">/, '')
+          .replace(/<script src="popup\.js"><\/script>/, '<script>' + popupJs + '</script>') +
+        '</body></html>';
+      await popup.goto('data:text/html,' + encodeURIComponent(inlineHtml), { waitUntil: 'domcontentloaded', timeout: 8000 });
+      // The container may be display:none until configured — wait for attach, not visibility.
+      await popup.waitForSelector('#popup-ai-features', { state: 'attached', timeout: 5000 });
+      return popup;
+    }
+
+    // Not configured → AI prefs hidden, relocated out of Feature Settings.
+    var p1 = await buildPopup(false);
+    try {
+      await p1.waitForFunction(function () {
+        var el = document.getElementById('popup-ai-features');
+        return el && getComputedStyle(el).display === 'none';
+      }, { timeout: 5000 });
+
+      var inFeatureSection = await p1.evaluate(function () {
+        var sections = document.querySelectorAll('.popup-section');
+        var fs = Array.prototype.find.call(sections, function (s) {
+          var t = s.querySelector('.popup-section-title');
+          return t && t.textContent.indexOf('Feature Settings') !== -1;
+        });
+        return fs ? !!fs.querySelector('[data-key="aiTranslate"], [data-key="aiSummary"], [data-key="aiTargetLang"]') : false;
+      });
+      if (inFeatureSection) throw new Error('AI prefs still live inside Feature Settings');
+
+      var inAiSection = await p1.evaluate(function () {
+        var ai = document.getElementById('popup-ai-section');
+        return ai ? !!ai.querySelector('[data-key="aiTranslate"], [data-key="aiSummary"], [data-key="aiTargetLang"]') : false;
+      });
+      if (!inAiSection) throw new Error('AI prefs not found inside AI 助手 section');
+    } finally {
+      await p1.close();
+    }
+
+    // Configured → AI prefs visible, translate on by default.
+    var p2 = await buildPopup(true);
+    try {
+      await p2.waitForFunction(function () {
+        var el = document.getElementById('popup-ai-features');
+        return el && getComputedStyle(el).display !== 'none';
+      }, { timeout: 5000 });
+
+      var translateUnchecked = await p2.$eval('[data-key="aiTranslate"] .popup-check', function (el) { return el.classList.contains('unchecked'); });
+      if (translateUnchecked) throw new Error('aiTranslate should be checked by default');
+    } finally {
+      await p2.close();
+    }
+  });
+
+  // =====================================================================
+  //  23  In-page settings gates AI rows on model config
+  // =====================================================================
+  await runTest('23. In-page settings shows AI prefs only when configured', async function () {
+    // Not configured → the three AI pref rows are absent, config-info present.
+    var p = await context.newPage();
+    await p.addInitScript({ content: 'window.__mdAiMockConfigured = false;' });
+    await prepareReaderPage(p);
+    await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('.md-content-inner', { timeout: 10000 });
+    await injectCSS(p);
+    await p.waitForTimeout(300); // let reconcileAIConfig() settle
+    try {
+      await p.click('[data-action="open-settings"]');
+      await p.waitForTimeout(300);
+      var labels = await p.$$eval('#md-settings-panel .md-settings-label', function (els) {
+        return els.map(function (el) { return el.textContent.trim(); }).join('|');
+      });
+      if (labels.indexOf('AI 划词翻译') !== -1 || labels.indexOf('AI 总结') !== -1 || labels.indexOf('AI 翻译目标语言') !== -1) {
+        throw new Error('AI prefs should be hidden when not configured: ' + labels);
+      }
+      if (labels.indexOf('AI 模型配置') === -1) throw new Error('AI config info row missing when not configured: ' + labels);
+      await p.click('[data-action="close-settings"]');
+      await p.waitForTimeout(200);
+    } finally {
+      await p.close();
+    }
+
+    // Configured → the three AI pref rows appear (mock SW default: configured=true).
+    var p2 = await context.newPage();
+    await prepareReaderPage(p2);
+    await p2.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+    await p2.waitForSelector('.md-content-inner', { timeout: 10000 });
+    await injectCSS(p2);
+    await p2.waitForTimeout(300);
+    try {
+      await p2.click('[data-action="open-settings"]');
+      await p2.waitForTimeout(300);
+      var labels2 = await p2.$$eval('#md-settings-panel .md-settings-label', function (els) {
+        return els.map(function (el) { return el.textContent.trim(); }).join('|');
+      });
+      if (labels2.indexOf('AI 划词翻译') === -1) throw new Error('aiTranslate row missing when configured: ' + labels2);
+      if (labels2.indexOf('AI 总结') === -1) throw new Error('aiSummary row missing when configured: ' + labels2);
+      if (labels2.indexOf('AI 翻译目标语言') === -1) throw new Error('aiTargetLang row missing when configured: ' + labels2);
+      await p2.click('[data-action="close-settings"]');
+      await p2.waitForTimeout(200);
+    } finally {
+      await p2.close();
+    }
   });
 
 

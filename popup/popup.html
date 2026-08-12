@@ -12,7 +12,7 @@
       <img src="../icons/icon48.png" class="popup-logo" alt="M" width="36" height="36">
       <div>
         <h1 class="popup-title">Markdown Reader</h1>
-        <p class="popup-version">v1.1.0</p>
+        <p class="popup-version">v1.3.0</p>
       </div>
     </div>
 
@@ -104,22 +104,25 @@
         <button class="popup-theme-btn" data-theme="light">
           <span>☀️</span> Light
         </button>
+        <button class="popup-theme-btn" data-theme="light-indigo">
+          <span>🔷</span> Indigo
+        </button>
         <button class="popup-theme-btn" data-theme="dark">
           <span>🌙</span> Dark
         </button>
       </div>
-      <div class="popup-theme-toggle popup-theme-pro">
-        <button class="popup-theme-btn popup-theme-pro-btn" data-theme="nord">
-          <span>❄️</span> Nord <span class="popup-pro-badge">Pro</span>
+      <div class="popup-theme-toggle popup-theme-grid">
+        <button class="popup-theme-btn" data-theme="nord">
+          <span>❄️</span> Nord
         </button>
-        <button class="popup-theme-btn popup-theme-pro-btn" data-theme="solarized">
-          <span>🌻</span> Solarized <span class="popup-pro-badge">Pro</span>
+        <button class="popup-theme-btn" data-theme="solarized">
+          <span>🌻</span> Solarized
         </button>
-        <button class="popup-theme-btn popup-theme-pro-btn" data-theme="dracula">
-          <span>🧛</span> Dracula <span class="popup-pro-badge">Pro</span>
+        <button class="popup-theme-btn" data-theme="dracula">
+          <span>🧛</span> Dracula
         </button>
-        <button class="popup-theme-btn popup-theme-pro-btn" data-theme="tokyo-night">
-          <span>🌃</span> Tokyo Night <span class="popup-pro-badge">Pro</span>
+        <button class="popup-theme-btn" data-theme="tokyo-night">
+          <span>🌃</span> Tokyo Night
         </button>
       </div>
     </div>
@@ -153,21 +156,16 @@
           <span class="popup-field-label">模型名称</span>
           <input type="text" class="popup-input-text" id="aiModel" placeholder="gpt-4o-mini" autocomplete="off" spellcheck="false" />
         </label>
-        <label class="popup-field">
-          <span class="popup-field-label">翻译目标语言</span>
-          <select class="popup-select" id="aiTargetLang">
-            <option>中文</option>
-            <option>English</option>
-            <option>日本語</option>
-            <option>한국어</option>
-            <option>Français</option>
-            <option>Deutsch</option>
-            <option>Español</option>
-          </select>
-        </label>
       </div>
 
-      <div class="popup-feature-list" style="margin-top:6px;">
+      <div class="popup-ai-actions">
+        <button class="popup-ai-test-btn" id="aiTestBtn" type="button">🔌 测试连接</button>
+        <span class="popup-ai-status" id="aiStatus"></span>
+      </div>
+
+      <!-- AI feature prefs appear only after the model connection is configured -->
+      <div class="popup-ai-features" id="popup-ai-features" style="display:none;">
+        <div class="popup-ai-features-title">AI 功能</div>
         <div class="popup-feature" data-key="aiTranslate">
           <span class="popup-check">✓</span>
           <div class="popup-feature-text">
@@ -180,39 +178,25 @@
             <div class="popup-feature-label">启用总结（段落 / 全篇）</div>
           </div>
         </div>
-      </div>
-
-      <div class="popup-ai-actions">
-        <button class="popup-ai-test-btn" id="aiTestBtn" type="button">🔌 测试连接</button>
-        <span class="popup-ai-status" id="aiStatus"></span>
-      </div>
-      <div class="popup-ai-hint">密钥只存在本地（chrome.storage.local），不会同步到 Google 账号。填写 Base URL 后保存时会请求访问该域名。</div>
-      <button class="popup-ai-done-btn" id="aiDoneBtn" type="button" style="display:none;">✓ 完成，返回阅读</button>
-    </div>
-
-    <div class="popup-section" id="popup-license-section">
-      <h2 class="popup-section-title">⚡ Markdown Reader Pro</h2>
-      <div class="popup-license-status popup-license-status--unknown" id="licenseStatus">
-        <span class="popup-license-status-text" id="licenseStatusText">正在检查 License…</span>
-      </div>
-      <div class="popup-license-form" id="licenseForm">
-        <label class="popup-field">
-          <span class="popup-field-label">License Key</span>
-          <div class="popup-key-row">
-            <input type="password" class="popup-input-text" id="licenseKeyInput" placeholder="粘贴 License Key" autocomplete="off" spellcheck="false" />
-            <button class="popup-key-toggle" id="licenseKeyToggle" type="button" title="显示 / 隐藏">👁</button>
+        <div class="popup-feature" data-key="aiTargetLang">
+          <span class="popup-check">✓</span>
+          <div class="popup-feature-text">
+            <div class="popup-feature-label">翻译目标语言</div>
+            <select class="popup-select" id="aiTargetLang">
+              <option>中文</option>
+              <option>English</option>
+              <option>日本語</option>
+              <option>한국어</option>
+              <option>Français</option>
+              <option>Deutsch</option>
+              <option>Español</option>
+            </select>
           </div>
-        </label>
-        <div class="popup-license-actions">
-          <button class="popup-license-activate-btn" id="licenseActivateBtn" type="button">激活</button>
-          <button class="popup-license-deactivate-btn" id="licenseDeactivateBtn" type="button" style="display:none;">停用此设备</button>
         </div>
       </div>
-      <div class="popup-license-buy">
-        <button class="popup-license-buy-btn" id="licenseBuyBtn" type="button">升级 Pro · $2.99 买断</button>
-        <a class="popup-license-portal-link" id="licensePortalLink" href="#" target="_blank" rel="noopener">没收到 Key？查询我的订单</a>
-      </div>
-      <div class="popup-license-hint">买断一次，3 设备激活。License 仅本地存储（chrome.storage.local），不上传任何服务器。</div>
+
+      <div class="popup-ai-hint">密钥只存在本地（chrome.storage.local），不会同步到 Google 账号。填写 Base URL 后保存时会请求访问该域名。</div>
+      <button class="popup-ai-done-btn" id="aiDoneBtn" type="button" style="display:none;">✓ 完成，返回阅读</button>
     </div>
 
     <div class="popup-section" id="popup-activate-section" style="display:none;">

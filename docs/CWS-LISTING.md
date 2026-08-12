@@ -5,7 +5,7 @@
 
 ## Short description (132 chars max)
 
-Beautiful Markdown reader: three-pane view, themes (incl. Pro), AI translate & summarize with your own model. Intercepts .md URLs.
+Beautiful Markdown reader: three-pane view, 7 free themes, AI translate & summarize with your own model. Intercepts .md URLs.
 
 ## Detailed description
 
@@ -25,20 +25,15 @@ page. No more wall-of-source-text Markdown.
   text to translate or summarize; one-click summarize for the whole document.
   **Your API key never leaves your machine** — it's stored locally and sent
   directly to the provider you choose.
-- **Themes** — light & dark.
+- **Themes** — 7 carefully-crafted themes, all free: **Light, Indigo, Dark,
+  Nord, Solarized, Dracula, Tokyo Night**.
 - **Search, copy code, collapsible sections, custom CSS, font controls**, and
   11 toggleable features.
-
-### Markdown Reader Pro ($2.99, one-time)
-
-Unlock 4 additional carefully-crafted themes — **Nord, Solarized, Dracula,
-Tokyo Night**. Buy once, use on up to 3 devices. License is verified directly
-with our Merchant of Record (LemonSqueezy); no account, no backend.
 
 ### Privacy
 
 - No analytics. No tracking. No advertising.
-- Your AI key and Pro license live only in `chrome.storage.local`.
+- Your AI key lives only in `chrome.storage.local`.
 - The `declarativeNetRequest` permission is used solely to let the AI feature
   talk to your own local model server (Ollama / LM Studio) — it removes the
   `Origin` header on requests to `localhost` only. It never touches public
@@ -48,9 +43,8 @@ See full policies: https://github.com/yiyan-yixing/markdown-reader/tree/main/doc
 
 ### Support
 
-Questions or refunds? Open an issue at
-https://github.com/yiyan-yixing/markdown-reader/issues — or use "查询我的订单"
-in the extension popup for self-service license/order lookup.
+Questions or feedback? Open an issue at
+https://github.com/yiyan-yixing/markdown-reader/issues
 
 ---
 
