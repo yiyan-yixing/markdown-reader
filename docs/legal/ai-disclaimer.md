@@ -1,11 +1,11 @@
-# AI 免责声明 · Markdown Reader Pro（Terms of Service 节选）
+# AI 免责声明 · PageSew（Terms of Service 节选）
 
 > **级联追踪**：cascade-20260805-mdrp-linkvalidation
 > **用途**：服务条款（Terms of Service）中关于 AI 功能的免责节选，与隐私政策同站挂载（@dev 负责挂载到 GitHub Pages）
-> **版本**：v1.0 ｜ **版本日期 / 生效日期**：2026-08-05
-> **适用产品**：Markdown Reader / Markdown Reader Pro（以下简称「本扩展」）
+> **版本**：v2.0 ｜ **最后更新：2026-10-20；生效日：首次公开发布日**
+> **适用产品**：PageSew（Chrome 扩展，原名 Markdown Reader）（以下简称「本扩展」）
 > **发布者**：yiyan-yixing（一言一行）
-> **联系方式**：support@yiyan-yixing.com
+> **联系方式**：yiyanyixing880@gmail.com
 
 ---
 
@@ -83,4 +83,4 @@ The AI features of this extension (including, but not limited to, AI translation
 
 ---
 
-**本 AI 免责声明自 2026-08-05 起生效。**
+**本 AI 免责声明最后更新于 2026-10-20，自首次公开发布日起生效。**

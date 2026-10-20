@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Markdown Reader — Privacy &amp; Policies</title>
+  <title>PageSew — Privacy &amp; Policies</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 0 auto; padding: 32px 20px; color: #2d3d50; line-height: 1.6; }
     h1 { font-size: 1.8em; border-bottom: 2px solid #eaebee; padding-bottom: 8px; }
@@ -17,48 +17,51 @@
   </style>
 </head>
 <body>
-  <h1>Markdown Reader &amp; Markdown Reader Pro — Policies</h1>
-  <p class="meta">Effective: 2026-08-05 &middot; Product by 一言一行 (yiyan-yixing)</p>
+  <h1>PageSew — Privacy &amp; Policies</h1>
+  <p class="meta">Version 1.3.0 (draft) &middot; Last updated: 2026-10-20; Effective date: date of first public release &middot; Published by 一言一行 (yiyan-yixing)</p>
 
-  <p>Markdown Reader is a browser extension that renders Markdown files in a clean,
-  three-panel reader. <strong>Markdown Reader Pro</strong> adds licensed themes as a
-  one-time purchase. This page summarizes our data practices; full texts are linked below.</p>
+  <p>PageSew is a free browser extension that renders Markdown files in a clean
+  three-panel reader: local <code>.md</code> files and Markdown pages on GitHub, GitLab and
+  Bitbucket. It has no account system, no analytics and no paid tier. This page summarizes
+  our data practices; full texts are linked below.</p>
 
   <div class="card">
     <h2>1. Privacy Policy</h2>
-    <p><strong>We don't run a server for your data.</strong> The extension has no backend of its own.</p>
+    <p><strong>The extension has no backend of its own and we run no server for your data.</strong></p>
     <ul>
-      <li><strong>AI feature (BYO model):</strong> your API key is stored only in <code>chrome.storage.local</code> on your machine — it is never synced to Google, never sent to any server we control, and requests go directly from your browser to the model endpoint you configured.</li>
-      <li><strong>Pro license:</strong> your license key is stored only in <code>chrome.storage.local</code> and is sent exclusively to LemonSqueezy (our Merchant of Record) for activation/validation. It is never transmitted to any server we control.</li>
-      <li><strong>Settings &amp; preferences:</strong> stored via Chrome's <code>storage.sync</code>/<code>storage.local</code>.</li>
-      <li><strong>No analytics, no tracking, no advertising</strong> — we collect nothing.</li>
-      <li><strong>declarativeNetRequest</strong> is used solely to remove the <code>Origin</code> header from this extension's own requests to <code>localhost</code>/<code>127.0.0.1</code>/<code>0.0.0.0</code>, so local AI servers (Ollama, LM Studio, …) accept the request. It never reads cookies, auth tokens, or response bodies, and never touches public domains.</li>
+      <li><strong>Page text</strong> is rendered locally in your browser. It is never uploaded to us and never stored by the extension.</li>
+      <li><strong>AI feature (bring your own model):</strong> selected text is sent only when you actively trigger translation or summarization, directly from your browser to the AI endpoint <em>you</em> configured. We do not relay, intercept or store it.</li>
+      <li><strong>API key:</strong> stored in plain text in <code>chrome.storage.local</code> (key <code>mdReaderApiKey</code>). It is never synced, never exposed to the in-page script, and is read only by the background service worker. It goes only to your configured AI endpoint, as <code>Authorization: Bearer</code> or <code>x-api-key</code>.</li>
+      <li><strong>Settings:</strong> stored in <code>chrome.storage.sync</code> (key <code>mdReaderSettings</code>) — theme, font size, content width, centering, outline, file tree, auto-refresh, custom CSS, plugin toggles, AI service / base URL / model, and language preferences. If you enable Chrome sync they sync to your own Google account under Google's terms; the API key is never included.</li>
+      <li><strong>Remote requests</strong> go only to <code>raw.githubusercontent.com</code>, <code>gitlab.com</code>, <code>bitbucket.org</code> (raw Markdown) and <code>api.github.com</code> (directory listing). Whether your browser attaches an existing site session is decided by the browser; the extension does not read it.</li>
+      <li><strong>AI output</strong> is shown in the current page only and is never written to extension storage.</li>
+      <li><strong>No analytics, no telemetry, no advertising, no tracking, no accounts, no paid features.</strong></li>
+      <li><strong>declarativeNetRequest</strong> is used only for a single session rule (id <code>1001</code>, action <code>modifyHeaders</code>) that removes the <code>Origin</code> <em>request</em> header from this extension's own requests to <code>localhost</code>, <code>127.0.0.1</code> and <code>0.0.0.0</code>, so local model servers (Ollama, LM Studio, …) accept the request. It does not modify response headers, does not read request or response bodies, never touches public domains, and never reads cookies or credentials.</li>
     </ul>
     <p><a href="privacy-policy.md">Full privacy policy →</a></p>
   </div>
 
   <div class="card">
-    <h2>2. Refund Policy (Markdown Reader Pro)</h2>
-    <p><strong>$2.99 one-time purchase.</strong> 7-day no-questions refund + 30-day bug-based refund, processed via LemonSqueezy. Refunding automatically disables the license (Pro relocks on the next online validation).</p>
-    <p><a href="refund-policy.md">Full refund policy →</a></p>
+    <h2>2. Free Software — No Purchases, No Refunds</h2>
+    <p>PageSew is <strong>free</strong>. There is no paid version, no subscription, no
+    purchase flow and no refund flow. Every published feature is available to all users.
+    If a paid feature is ever introduced, full terms will be published separately and
+    announced in advance, and will not apply retroactively.</p>
+    <p><a href="refund-policy.md">Full policy →</a></p>
   </div>
 
   <div class="card">
     <h2>3. AI Disclaimer (Terms of Service excerpt)</h2>
-    <p>The AI translate/summarize features use <strong>your own model</strong> (OpenAI, DeepSeek, Anthropic, local Ollama, etc.). We are not responsible for AI output. You must comply with your model provider's terms.</p>
+    <p>The AI translate/summarize features use <strong>your own model</strong> (OpenAI, DeepSeek,
+    Anthropic, local Ollama, etc.). We are not responsible for AI output. You must comply with
+    the terms of the AI service you configure.</p>
     <p><a href="ai-disclaimer.md">Full AI disclaimer →</a></p>
   </div>
 
-  <div class="card">
-    <h2>4. EU 14-day Withdrawal Consent</h2>
-    <p>At checkout, EU consumers consent to immediate digital delivery and waive the standard 14-day withdrawal right (Directive 2011/83/EU Article 16). Refunds remain available under our refund policy above.</p>
-    <p><a href="eu-withdrawal-consent.md">Full consent text →</a></p>
-  </div>
-
   <div class="support">
-    <strong>Support:</strong> questions, refunds, or bug reports?
-    Open an issue at <a href="https://github.com/yiyan-yixing/markdown-reader/issues">github.com/yiyan-yixing/markdown-reader/issues</a>
-    — or use the "查询我的订单" link in the extension popup for license/order self-service.
+    <strong>Support:</strong> bug reports and questions?
+    Open an issue at <a href="https://github.com/yiyan-yixing/markdown-reader/issues">github.com/yiyan-yixing/markdown-reader/issues</a>.
+    Support email: <a href="mailto:yiyanyixing880@gmail.com">yiyanyixing880@gmail.com</a>.
   </div>
 
   <p class="meta" style="margin-top:2em;">Source repo: <a href="https://github.com/yiyan-yixing/markdown-reader">github.com/yiyan-yixing/markdown-reader</a></p>
