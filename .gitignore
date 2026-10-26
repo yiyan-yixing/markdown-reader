@@ -3,3 +3,9 @@ node_modules/
 
 # macOS
 .DS_Store
+
+# 打包产物（Chrome Web Store 上传用 zip，本地保留不入库）
+dist/
+
+# 素材加工中间件（promo 图稿的工作副本与审计输出；成图在 store-assets/promo/ 根下）
+store-assets/promo/.work/
