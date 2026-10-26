@@ -1,0 +1,15 @@
+{
+  "ranAt": "2026-10-20T08:00:08.431Z",
+  "extId": "khpoiohihjloebninbpokomjlnlcjmhp",
+  "results": [
+    {
+      "id": "SEC-001",
+      "name": "Markdown cannot claim reader ids/names or inject inline styles",
+      "status": "PASS",
+      "ms": 164,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/SEC-001-sanitize.png"
+      ]
+    }
+  ]
+}

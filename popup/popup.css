@@ -418,3 +418,45 @@ body.standalone #popup-ai-section {
   gap: 8px;
   margin-top: 8px;
 }
+
+
+/* ── v1.4.0 controls: custom CSS + plugin options ── */
+.popup-feature-stacked {
+  align-items: flex-start;
+}
+
+.popup-textarea {
+  margin-top: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid #e2e4f0;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  resize: vertical;
+  background: #ffffff;
+  color: #374151;
+}
+
+.popup-plugin-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.popup-plugin-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.popup-plugin-options input:disabled + span,
+.popup-plugin-options input:disabled {
+  opacity: 0.5;
+}

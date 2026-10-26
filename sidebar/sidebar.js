@@ -38,17 +38,71 @@
     if (msg.type === 'fileTree') {
       renderTree(msg.data);
     }
-  });
-
-  // Request file tree from active tab
-  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-    if (tabs[0]?.id) {
-      chrome.tabs.sendMessage(tabs[0].id, { type: 'requestFileTree' }).catch(() => {
-        // No content script active — show placeholder
-        treeContainer.innerHTML = '<div class="tree-empty">Open a .md file to browse files</div>';
-      });
+    // The reader soft-navigated: re-fetch so the current-file marker is right.
+    if (msg.type === 'readerChanged') {
+      requestTree();
     }
   });
+
+  // The side panel is its own tab/window, so "active tab" may be the panel
+  // itself. Ask the service worker for the most recently active reader tab
+  // (MR-024), then fall back to a direct active-tab query.
+  let readerTabId = null;
+
+  function requestTree() {
+    treeContainer.innerHTML = '<div class="tree-empty">Loading files…</div>';
+    try {
+      chrome.runtime.sendMessage({ type: 'getActiveReaderTree' }, resp => {
+        if (resp && resp.success && resp.readerActive !== false
+            && Array.isArray(resp.data) && resp.data.length) {
+          readerTabId = resp.tabId || null;
+          renderTree(resp.data);
+          return;
+        }
+        fallbackToActiveTab();
+      });
+    } catch (_) { fallbackToActiveTab(); }
+  }
+
+  function fallbackToActiveTab() {
+    chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+      if (!tabs[0]?.id) {
+        treeContainer.innerHTML = '<div class="tree-empty">Open a .md file to browse files</div>';
+        return;
+      }
+      readerTabId = tabs[0].id;
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'requestFileTree' })
+        .then(resp => {
+          if (resp && resp.readerActive !== false && Array.isArray(resp.data) && resp.data.length) renderTree(resp.data);
+          else treeContainer.innerHTML = '<div class="tree-empty">Open a .md file to browse files</div>';
+        })
+        .catch(() => {
+          treeContainer.innerHTML = '<div class="tree-empty">Open a .md file to browse files</div>';
+        });
+    });
+  }
+
+  requestTree();
+
+  // Navigation helpers — keep using the reader tab, not the panel tab.
+  function navigateFile(path) {
+    if (readerTabId != null) {
+      chrome.tabs.sendMessage(readerTabId, { type: 'navigateToFile', path }).catch(() => {});
+    } else {
+      chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+        if (tabs[0]?.id) chrome.tabs.sendMessage(tabs[0].id, { type: 'navigateToFile', path }).catch(() => {});
+      });
+    }
+  }
+
+  function openLocation(url) {
+    if (!url) return;
+    if (readerTabId != null) {
+      chrome.tabs.update(readerTabId, { url }).catch(() => {});
+    } else {
+      chrome.tabs.create({ url }).catch(() => {});
+    }
+  }
 
   // Render file tree
   function renderTree(items) {
@@ -82,12 +136,23 @@
         item.children.forEach(child => {
           children.appendChild(createTreeItem(child));
         });
+      } else if (item.url) {
+        // Flat provider entry: expose an explicit "open folder" affordance,
+        // since there are no cached children to expand.
+        const open = document.createElement('span');
+        open.className = 'tree-open';
+        open.textContent = '↗';
+        open.title = 'Open folder';
+        open.addEventListener('click', e => { e.stopPropagation(); openLocation(item.url); });
+        header.appendChild(open);
       }
 
       // Event delegation on treeContainer handles clicks (both
       // programmatic and raw-HTML items). Individual listener kept for
       // closure-based `item.path` reference in savedCollapsedState.
-      header.addEventListener('click', () => {
+      header.addEventListener('click', (event) => {
+        // Stop the delegated container handler from toggling a second time.
+        event.stopPropagation();
         const arrow = header.querySelector('.tree-arrow');
         const children = header.parentElement?.querySelector(':scope > .tree-dir-children');
         if (!arrow || !children) return;
@@ -103,7 +168,7 @@
       el.appendChild(children);
     } else {
       const fileItem = document.createElement('div');
-      fileItem.className = 'tree-item';
+      fileItem.className = 'tree-item' + (item.isCurrent ? ' current' : '');
       const icon = item.name.endsWith('.md') ? '📄' :
                    item.name.endsWith('.png') || item.name.endsWith('.jpg') ? '🖼️' : '📄';
       fileItem.innerHTML = `
@@ -112,15 +177,7 @@
       `;
 
       fileItem.addEventListener('click', () => {
-        // Navigate to this file
-        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-          if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(tabs[0].id, {
-              type: 'navigateToFile',
-              path: item.path
-            });
-          }
-        });
+        navigateFile(item.url || item.path);
       });
 
       el.appendChild(fileItem);
@@ -239,6 +296,7 @@
     }
 
     searchActive = true;
+    saveCollapsedStates();
     const lowerQuery = query.toLowerCase();
 
     // 1. Hide non-matching files, collect matches

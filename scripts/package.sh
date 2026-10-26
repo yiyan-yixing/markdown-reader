@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Markdown Reader — package a Chrome Web Store upload ZIP (B5, Day 7)
+# PageSew — package a Chrome Web Store upload ZIP (B5, Day 7)
 #
-# Produces dist/markdown-reader-v<version>.zip containing exactly what the store
+# Produces dist/pagesew-v<version>.zip containing exactly what the store
 # needs — no tests, no webhook, no docs, no .git.
 #
 # Usage:  bash scripts/package.sh
@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 VERSION=$(python3 -c 'import json;print(json.load(open("manifest.json"))["version"])')
-OUT="dist/markdown-reader-v${VERSION}.zip"
+OUT="dist/pagesew-v${VERSION}.zip"
 
 mkdir -p dist
 rm -f "$OUT"
@@ -27,9 +27,9 @@ zip -r "$OUT" \
   sidebar/ \
   styles/ \
   lib/ \
-  icons/ \
-  preview.html \
-  sample.md \
+  icons/icon16.png \
+  icons/icon48.png \
+  icons/icon128.png \
   -x '**/.DS_Store' 'tests/*' '*.test.js'
 
 echo

@@ -4,7 +4,9 @@
   "private": true,
   "description": "E2E test suite for Markdown Reader Chrome extension",
   "scripts": {
-    "test": "node markdown-reader.test.js"
+    "test": "node markdown-reader.test.js",
+    "test:real": "node e2e-real-extension.test.js",
+    "test:all": "node markdown-reader.test.js && node e2e-real-extension.test.js"
   },
   "dependencies": {
     "playwright": "^1.62.0"

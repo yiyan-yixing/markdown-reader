@@ -141,3 +141,23 @@ body {
 .sidebar-tree::-webkit-scrollbar { width: 5px; }
 .sidebar-tree::-webkit-scrollbar-track { background: transparent; }
 .sidebar-tree::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+/* Flat provider entries: explicit open-folder affordance (MR-023/024) */
+.tree-open {
+  margin-left: auto;
+  padding: 0 4px;
+  color: #6b7280;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.tree-item:hover .tree-open { opacity: 1; }
+.tree-open:hover { color: #2563eb; }
+
+/* Current file in the side-panel tree */
+.tree-item.current {
+  background: #e8edff;
+  border-left: 2px solid #607cd2;
+  font-weight: 600;
+}

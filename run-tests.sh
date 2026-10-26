@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "=============================================="
-echo "  Markdown Reader — E2E Test Runner"
+echo "  PageSew — E2E Test Runner"
 echo "=============================================="
 echo ""
 
@@ -69,9 +69,20 @@ echo ""
 # Set timeout: 3 minutes per test overall
 export NODE_OPTIONS="--max-old-space-size=512"
 
-cd tests && HEADLESS="${HEADLESS:-false}" node markdown-reader.test.js
-RESULT=$?
+cd tests
+set +e
+HEADLESS="${HEADLESS:-false}" node markdown-reader.test.js
+RESULT_LEGACY=$?
+echo ""
+echo "=============================================="
+echo "  Running real-extension suite (--load-extension)"
+echo "=============================================="
+echo ""
+HEADLESS="${HEADLESS:-false}" node e2e-real-extension.test.js "$@"
+RESULT_REAL=$?
 cd "$SCRIPT_DIR"
+set -e
+RESULT=$((RESULT_LEGACY + RESULT_REAL))
 
 echo ""
 echo "=============================================="

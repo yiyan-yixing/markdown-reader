@@ -8,3 +8,70 @@ pre code.hljs{display:block;overflow-x:auto;padding:1em}code.hljs{padding:3px 5p
   Outdated base version: https://github.com/primer/github-syntax-light
   Current colors taken from GitHub's CSS
 */.hljs{color:#24292e;background:#fff}.hljs-doctag,.hljs-keyword,.hljs-meta .hljs-keyword,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language_{color:#d73a49}.hljs-title,.hljs-title.class_,.hljs-title.class_.inherited__,.hljs-title.function_{color:#6f42c1}.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable{color:#005cc5}.hljs-meta .hljs-string,.hljs-regexp,.hljs-string{color:#032f62}.hljs-built_in,.hljs-symbol{color:#e36209}.hljs-code,.hljs-comment,.hljs-formula{color:#6a737d}.hljs-name,.hljs-quote,.hljs-selector-pseudo,.hljs-selector-tag{color:#22863a}.hljs-subst{color:#24292e}.hljs-section{color:#005cc5;font-weight:700}.hljs-bullet{color:#735c0f}.hljs-emphasis{color:#24292e;font-style:italic}.hljs-strong{color:#24292e;font-weight:700}.hljs-addition{color:#22863a;background-color:#f0fff4}.hljs-deletion{color:#b31d28;background-color:#ffeef0}
+/* ── PageSew: light-family themes (all use a dark code well) ─────────────── */
+[data-theme="light"] .md-code-block .hljs,
+[data-theme="light-indigo"] .md-code-block .hljs,
+[data-theme="solarized"] .md-code-block .hljs {
+  background: transparent;
+  color: var(--md-code-text);
+}
+[data-theme="light"] .hljs-comment,
+[data-theme="light-indigo"] .hljs-comment,
+[data-theme="solarized"] .hljs-comment,
+[data-theme="light"] .hljs-quote,
+[data-theme="light-indigo"] .hljs-quote,
+[data-theme="solarized"] .hljs-quote { color: #8b949e; font-style: italic; }
+[data-theme="light"] .hljs-keyword,
+[data-theme="light-indigo"] .hljs-keyword,
+[data-theme="light"] .hljs-selector-tag,
+[data-theme="light-indigo"] .hljs-selector-tag,
+[data-theme="light"] .hljs-literal,
+[data-theme="light-indigo"] .hljs-literal,
+[data-theme="light"] .hljs-type,
+[data-theme="light-indigo"] .hljs-type { color: #ff7b72; }
+[data-theme="light"] .hljs-string,
+[data-theme="light-indigo"] .hljs-string,
+[data-theme="light"] .hljs-regexp,
+[data-theme="light-indigo"] .hljs-regexp,
+[data-theme="light"] .hljs-addition,
+[data-theme="light-indigo"] .hljs-addition { color: #a5d6ff; }
+[data-theme="light"] .hljs-number,
+[data-theme="light-indigo"] .hljs-number,
+[data-theme="light"] .hljs-attr,
+[data-theme="light-indigo"] .hljs-attr,
+[data-theme="light"] .hljs-variable,
+[data-theme="light-indigo"] .hljs-variable { color: #79c0ff; }
+[data-theme="light"] .hljs-title,
+[data-theme="light-indigo"] .hljs-title,
+[data-theme="light"] .hljs-function .hljs-title,
+[data-theme="light-indigo"] .hljs-function .hljs-title { color: #d2a8ff; }
+[data-theme="light"] .hljs-built_in,
+[data-theme="light-indigo"] .hljs-built_in,
+[data-theme="light"] .hljs-symbol,
+[data-theme="light-indigo"] .hljs-symbol { color: #ffa657; }
+[data-theme="light"] .hljs-name,
+[data-theme="light-indigo"] .hljs-name,
+[data-theme="light"] .hljs-tag,
+[data-theme="light-indigo"] .hljs-tag { color: #7ee787; }
+[data-theme="light"] .hljs-params,
+[data-theme="light-indigo"] .hljs-params { color: #c9d1d9; }
+
+/* Solarized — Ethan Schoonover's palette on --md-code-bg (#073642) */
+[data-theme="solarized"] .hljs-comment,
+[data-theme="solarized"] .hljs-quote { color: #586e75; }
+[data-theme="solarized"] .hljs-keyword,
+[data-theme="solarized"] .hljs-selector-tag,
+[data-theme="solarized"] .hljs-literal,
+[data-theme="solarized"] .hljs-type { color: #859900; }
+[data-theme="solarized"] .hljs-string,
+[data-theme="solarized"] .hljs-regexp,
+[data-theme="solarized"] .hljs-addition { color: #2aa198; }
+[data-theme="solarized"] .hljs-number,
+[data-theme="solarized"] .hljs-attr,
+[data-theme="solarized"] .hljs-variable { color: #d33682; }
+[data-theme="solarized"] .hljs-title,
+[data-theme="solarized"] .hljs-function .hljs-title { color: #b58900; }
+[data-theme="solarized"] .hljs-built_in,
+[data-theme="solarized"] .hljs-symbol { color: #cb4b16; }
+[data-theme="solarized"] .hljs-name,
+[data-theme="solarized"] .hljs-tag { color: #268bd2; }

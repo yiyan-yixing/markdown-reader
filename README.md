@@ -1,11 +1,11 @@
-# Markdown Reader — Chrome Extension
+# PageSew — Chrome Extension
 
-> Beautiful Markdown reader with outline, file tree, themes and more.
+> PageSew — beautiful Markdown reader with outline, file tree, themes and more.
 > Inspired by [md-reader](https://github.com/md-reader/md-reader).
 
-A Chrome extension that renders `.md` files in a beautiful three-panel reading interface — file tree on the left, rendered content in the center, and outline (TOC) on the right.
+PageSew is a Chrome extension that renders `.md` files in a beautiful three-panel reading interface — file tree on the left, rendered content in the center, and outline (TOC) on the right.
 
-![Markdown Reader](docs/screenshot.png)
+![PageSew](docs/screenshot.png)
 
 **Smart mode — knows when to auto-activate:**
 
@@ -17,7 +17,7 @@ A Chrome extension that renders `.md` files in a beautiful three-panel reading i
 | `gitlab.com/.../blob/*.md` | 🔘 **Floating button** | GitLab already renders well |
 | `bitbucket.org/.../src/*.md` | 🔘 **Floating button** | Bitbucket already renders well |
 
-**Also works via extension popup** — click the extension icon on any rendered page to get an "Open in Markdown Reader" button.
+**Also works via extension popup** — click the extension icon on any rendered page to get an "Open in PageSew" button.
 
 ## ✨ Features
 
@@ -71,8 +71,8 @@ A Chrome extension that renders `.md` files in a beautiful three-panel reading i
 > 无需安装 Git，适合直接下载。
 
 1. 前往 [Releases 页面](https://github.com/yiyan-yixing/markdown-reader/releases)
-2. 下载最新版本的 `markdown-reader-v*.zip`
-3. 解压到本地文件夹（如 `markdown-reader/`）
+2. 下载最新版本的 `pagesew-v*.zip`
+3. 解压到本地文件夹（如 `pagesew/`）
 4. 打开 Chrome → 地址栏输入 `chrome://extensions`
 5. 右上角开启 **开发者模式**
 6. 点击 **加载已解压的扩展程序**
@@ -129,7 +129,7 @@ markdown-reader/
 │   │     - buildReaderUI(): three-panel layout
 │   │     - buildOutline(): TOC from headings + heading anchors
 │   │     - performSearch(): full-text search with highlights
-│   │     - buildSettingsPanel(): 10 feature toggles
+│   │     - buildSettingsPanel(): feature toggles + per-extension options
 │   │     - toggleAllSidebars(): hide/show both sidebars
 │   │     - setupGoTopButton(): floating go-top (scroll > 640px)
 │   │     - setupResponsiveSidebars(): overlay mode on ≤960px
@@ -177,7 +177,7 @@ User opens URL
     │                                         → fetchRawMarkdown() via background SW
     │                                         → replacePageWithReader()
     │
-    ├─ Popup "Open in Markdown Reader" ──► sendMessage('activateReader')
+    ├─ Popup "Open in PageSew" ──► sendMessage('activateReader')
     │                                       → same as floating button click
     │
     └─ Other URLs ──► do nothing
@@ -196,8 +196,12 @@ All settings are saved to `chrome.storage.sync` and persist across sessions.
 | `showOutline` | `true` | Show TOC sidebar |
 | `showFileTree` | `true` | Show file tree sidebar |
 | `autoRefresh` | `false` | Auto-reload on file change (local only) |
-| `customCSS` | `""` | Custom CSS rules |
+| `customCSS` | `""` | Custom CSS rules (string) |
+| `customCSSEnabled` | `true` | Apply the saved custom CSS |
+| `customWidth` | `true` | Apply the custom content width |
+| `adjustFont` | `true` | Enable font-size controls |
 | `allPlugins` | `true` | Enable all GFM extensions |
+| `pluginOptions` | all `true` | Per-extension switches: `gfmTables`, `gfmTaskLists`, `gfmStrikethrough`, `gfmAutolinks` |
 
 ## 📋 Keyboard Shortcuts
 

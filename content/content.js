@@ -14,9 +14,22 @@
   // ── Prevent double-injection ──
   if (document.getElementById('md-reader-root')) return;
 
+  // The page we were injected into, before the reader replaces the DOM.
+  // Used by the "open original page" toolbar action (MR-022).
+  let originalPageUrl = window.location.href;
+  let detectedPageType = 'none';
+
   // ── Settings (defaults, synced with chrome.storage) ──
+  const DEFAULT_PLUGIN_OPTIONS = {
+    gfmTables: true,
+    gfmTaskLists: true,
+    gfmStrikethrough: true,
+    gfmAutolinks: true,
+  };
   const DEFAULTS = {
-    theme: 'light',
+    // New installs follow the system palette. Existing installs keep whatever
+    // they saved (merge below), so this only changes the default.
+    theme: 'auto',
     fontSize: 16,
     contentWidth: 800,
     centerContent: true,
@@ -26,8 +39,11 @@
     autoRefresh: false,
     refreshInterval: 3000,
     customCSS: '',
+    customCSSEnabled: true,
+    customWidth: true,
+    adjustFont: true,
     allPlugins: true,
-    pluginOptions: {},
+    pluginOptions: { ...DEFAULT_PLUGIN_OPTIONS },
     // AI feature preferences live at the top level; the `ai` object below holds
     // only the model connection (vendor / provider / baseUrl / model).
     targetLang: '中文',
@@ -41,12 +57,35 @@
       configured: false,
     },
   };
-  let settings = { ...DEFAULTS };
+  let settings = {
+    ...DEFAULTS,
+    pluginOptions: { ...DEFAULT_PLUGIN_OPTIONS },
+    ai: { ...DEFAULTS.ai },
+  };
+
+  const THEMES = ['light', 'light-indigo', 'dark', 'nord', 'solarized', 'dracula', 'tokyo-night'];
+  const darkMedia = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
   // All 7 themes (Light / Indigo / Dark / Nord / Solarized / Dracula / Tokyo
-  // Night) are free since v1.2.0 — the saved theme is applied verbatim.
+  // Night) are free since v1.2.0 — the saved theme is applied verbatim, except
+  // `auto`, which follows prefers-color-scheme. Named themes are still valid.
+  function resolveTheme(theme) {
+    if (theme === 'auto') return (darkMedia && darkMedia.matches) ? 'dark' : 'light';
+    return THEMES.includes(theme) ? theme : 'light';
+  }
+
   function sanitizeTheme(theme) {
-    return theme;
+    return resolveTheme(theme);
+  }
+
+  // Re-render the moment the OS flips while `auto` is selected.
+  if (darkMedia) {
+    const onSchemeChange = () => {
+      if (settings.theme !== 'auto') return;
+      applyTheme(); // updates data-theme, data-theme-family and the button title
+    };
+    if (typeof darkMedia.addEventListener === 'function') darkMedia.addEventListener('change', onSchemeChange);
+    else if (typeof darkMedia.addListener === 'function') darkMedia.addListener(onSchemeChange);
   }
 
   // ── Load settings from storage ──
@@ -55,7 +94,12 @@
       if (typeof chrome !== 'undefined' && chrome.storage) {
         chrome.storage.sync.get('mdReaderSettings', result => {
           if (result.mdReaderSettings) {
-            settings = { ...DEFAULTS, ...result.mdReaderSettings };
+            const saved = result.mdReaderSettings;
+            settings = { ...DEFAULTS, ...saved };
+            settings.ai = { ...DEFAULTS.ai, ...((saved && saved.ai) || {}) };
+            // MR-017: only NEW installs default to auto. A legacy settings
+            // object without a `theme` key keeps the old light default.
+            if (saved.theme === undefined) settings.theme = 'light';
             migrateSettings();
           }
           resolve(settings);
@@ -77,6 +121,32 @@
     delete ai.targetLang;
     delete ai.enableTranslate;
     delete ai.enableSummary;
+
+    // MR-020: the old popup wrote a boolean into `customCSS`, destroying any
+    // CSS the user had typed. Recover the intent into `customCSSEnabled` and
+    // keep the CSS field a string from now on.
+    if (typeof settings.customCSS === 'boolean') {
+      settings.customCSSEnabled = settings.customCSS;
+      settings.customCSS = '';
+    }
+    if (typeof settings.customCSS !== 'string') settings.customCSS = '';
+    if (typeof settings.customCSSEnabled !== 'boolean') settings.customCSSEnabled = true;
+
+    // MR-019/021: normalise the per-extension options schema.
+    const po = (settings.pluginOptions && typeof settings.pluginOptions === 'object')
+      ? settings.pluginOptions : {};
+    settings.pluginOptions = { ...DEFAULT_PLUGIN_OPTIONS };
+    Object.keys(DEFAULT_PLUGIN_OPTIONS).forEach(k => {
+      if (typeof po[k] === 'boolean') settings.pluginOptions[k] = po[k];
+    });
+
+    if (typeof settings.customWidth !== 'boolean') settings.customWidth = true;
+    if (typeof settings.adjustFont !== 'boolean') settings.adjustFont = true;
+
+    // Persist the repaired shape so the popup sees the same values.
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      try { chrome.storage.sync.set({ mdReaderSettings: settings }); } catch (_) {}
+    }
   }
 
   function saveSettings() {
@@ -90,9 +160,24 @@
     const url = window.location.href;
     const hostname = window.location.hostname;
 
-    // 1) file:// local .md files
+    // Escape hatch used by the "open original page" action: the reader must
+    // not intercept its own original-view tab.
+    try {
+      if (new URL(url).searchParams.get('pagesew') === 'original') return { type: 'none' };
+    } catch (_) {}
+
+    // 1) file:// local .md files. The extension is the signal — always read
+    // the <pre> body, even when the heuristic score is low (a long prose-heavy
+    // document with one heading would otherwise fail to intercept).
     if (url.startsWith('file://') && /\.(md|markdown|mdown|mkd)$/i.test(url)) {
-      return { type: 'local', rawMarkdown: getRawMarkdownFromPage() };
+      let raw = getRawMarkdownFromPage();
+      if (!raw) {
+        const pre = Array.from(document.querySelectorAll('pre'))
+          .find(p => !p.querySelector('img') && !p.querySelector('table') && p.textContent.trim().length > 20);
+        if (pre) raw = pre.textContent;
+        else if (document.body) raw = document.body.textContent || '';
+      }
+      return { type: 'local', rawMarkdown: raw };
     }
 
     // 2) GitHub blob URLs (rendered HTML, need to fetch raw)
@@ -111,9 +196,20 @@
       return { type: 'bitbucket-src' };
     }
 
-    // 5) Raw .md URLs (raw.githubusercontent.com, other raw text pages)
+    // 5) Raw .md URLs (raw.githubusercontent.com, other raw text pages).
+    // The `.md` suffix is the signal: accept a substantial <pre>/plain body even
+    // when the heuristic score is low (long prose before the first list).
     if (/\.(md|markdown|mdown|mkd)$/i.test(url)) {
-      const raw = getRawMarkdownFromPage();
+      let raw = getRawMarkdownFromPage();
+      if (!raw) {
+        const pre = Array.from(document.querySelectorAll('pre'))
+          .find(p => !p.querySelector('img') && !p.querySelector('table') && p.textContent.trim().length > 20);
+        if (pre) raw = pre.textContent;
+        else if (document.body && document.body.children.length <= 2) {
+          const bodyText = document.body.textContent || '';
+          if (bodyText.trim().length > 20) raw = bodyText;
+        }
+      }
       if (raw) return { type: 'raw-url', rawMarkdown: raw };
     }
 
@@ -208,7 +304,9 @@
   }
 
   // ── Navigate to another file without page reload (fetch content + swap reader) ──
+  let navRequestId = 0;
   async function navigateToFile(filePath) {
+    const navId = ++navRequestId;
     try {
       let rawMarkdown;
 
@@ -218,16 +316,25 @@
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         rawMarkdown = await resp.text();
       } else {
-        // Remote markdown — use background SW for CORS
-        rawMarkdown = await fetchRawMarkdown(filePath);
+        // GitHub/GitLab/Bitbucket blob/src URLs must be fetched through their
+        // raw counterpart — the blob host itself has no host permission.
+        let fetchUrl = filePath;
+        if (/^https:\/\/github\.com\/.+\/blob\//.test(filePath)) fetchUrl = githubBlobToRaw(filePath);
+        else if (/^https:\/\/gitlab\.com\/.+\/-\/blob\//.test(filePath)) fetchUrl = filePath.replace('/-/blob/', '/-/raw/');
+        else if (/^https:\/\/bitbucket\.org\/.+\/src\//.test(filePath)) fetchUrl = bitbucketSrcToRaw(filePath);
+        rawMarkdown = await fetchRawMarkdown(fetchUrl);
       }
 
+      if (navId !== navRequestId) return; // a newer click superseded this one
       if (!rawMarkdown || !looksLikeMarkdown(rawMarkdown)) {
         throw new Error('Not valid markdown');
       }
 
       // Update reader state URL (used by getCurrentFileInfo / buildFileTree)
       _readerFileUrl = filePath;
+      originalPageUrl = filePath;
+      detectedPageType = filePath.startsWith('file://') ? 'local' : 'raw-url';
+      cachedRawMarkdown = rawMarkdown;
       window.history.replaceState({}, '', filePath);
 
       // Update toolbar filename
@@ -242,6 +349,7 @@
       const contentInner = document.querySelector('.md-content-inner');
       if (contentInner) {
         contentInner.innerHTML = renderMarkdown(rawMarkdown);
+        highlightCodeBlocks(contentInner);
         buildOutline(contentInner);
         addCopyButtons();
         // Re-apply settings like custom CSS
@@ -252,8 +360,10 @@
 
       // Rebuild file tree for the new file's directory
       buildFileTree();
+      announceReader();
 
     } catch (_) {
+      if (navId !== navRequestId) return;
       // Fallback: full page navigation
       window.location.href = filePath;
     }
@@ -264,8 +374,16 @@
     try { return decodeURIComponent(str); } catch (e) { return str; }
   }
 
+  // ── Extract filename from a path (handle full paths or relative) ──
+  function basename(p) {
+    return String(p || '').replace(/\/+$/, '').split('/').pop() || p;
+  }
+
   // ── Current file path / URL info (optional override for in-page navigation) ──
   let _readerFileUrl = null;
+  // Raw markdown of the current document — needed because the reader replaces
+  // the page DOM (auto-refresh diff, plugin re-render, MR-018).
+  let cachedRawMarkdown = null;
 
   function getCurrentFileInfo(overrideUrl) {
     const url = overrideUrl || _readerFileUrl || window.location.href;
@@ -277,13 +395,7 @@
     const isGitLab = window.location.hostname === 'gitlab.com'
                      || window.location.hostname.endsWith('.gitlab.com');
 
-    let repoDir = '';
-    if (isGitHub) {
-      const match = url.match(/^(https:\/\/github\.com\/[^/]+\/[^/]+)/);
-      repoDir = match ? match[1] : '';
-    }
-
-    return { url, filename, dir, isLocal, isGitHub, isGitLab, repoDir };
+    return { url, filename, dir, isLocal, isGitHub, isGitLab };
   }
 
   // ── SVG icons (inline for reliability) ──
@@ -300,6 +412,8 @@
     settings: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     // AI summarize — sparkles (Lucide-style line art; reads as "AI-generate")
     sparkles: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>',
+    // External link — view the original page (MR-022)
+    link: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
     // AI assistant config — robot (Lucide-style line art; distinct from settings gear)
     bot: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>',
   };
@@ -319,7 +433,7 @@
           <button class="md-btn md-btn-tree" title="Toggle File Tree" data-action="toggle-tree">
             ${ICONS.sidebar}
           </button>
-          <span class="md-filename" title="${fileInfo.url}">${fileInfo.filename}</span>
+          <span class="md-filename" title="${escapeHtml(fileInfo.url)}">${escapeHtml(fileInfo.filename)}</span>
         </div>
         <div class="md-toolbar-center">
           <div class="md-search-box">
@@ -334,9 +448,10 @@
         <div class="md-toolbar-right">
           <button class="md-btn" data-action="font-dec" title="Decrease font">A-</button>
           <button class="md-btn" data-action="font-inc" title="Increase font">A+</button>
-          <button class="md-btn" data-action="toggle-theme" title="Toggle theme (light / dark / auto)">
+          <button class="md-btn md-btn-theme" data-action="toggle-theme" title="Theme: light → dark → auto">
             ${ICONS.sun}
             ${ICONS.moon}
+            <span class="md-theme-auto-badge" aria-hidden="true">A</span>
           </button>
           <button class="md-btn md-btn-outline" data-action="toggle-outline" title="Toggle Outline">
             ${ICONS.outline}
@@ -344,6 +459,8 @@
           <button class="md-btn" data-action="toggle-all-sidebars" title="Toggle All Sidebars">
             ${ICONS.expand}
           </button>
+          <button class="md-btn" data-action="browse-files" title="Browse files in side panel">${ICONS.folder}</button>
+          <button class="md-btn" data-action="open-original" title="Open original page">${ICONS.link}</button>
           <button class="md-btn md-btn-sparkles" data-action="summarize-all" title="总结全文（AI）">${ICONS.sparkles}</button>
           <button class="md-btn md-btn-bot" data-action="ai-config" title="AI 助手设置">${ICONS.bot}</button>
           <button class="md-btn" data-action="open-settings" title="Settings">
@@ -414,25 +531,109 @@
     return root;
   }
 
-  // ── Render markdown to HTML ──
+  // ── Escape untrusted text before interpolating it into an HTML string ──
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // ── Sanitize rendered HTML (markdown body + AI output) ──
+  // DOMPurify is bundled locally (lib/dompurify.min.js) — never loaded from a
+  // CDN. If it is somehow unavailable we fail closed by escaping everything.
+  const SANITIZE_CONFIG = {
+    FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'form', 'link', 'meta', 'base'],
+    // A document must not steal the reader's fixed ids / element names or
+    // overlay the UI with inline styles. Heading ids are assigned after
+    // sanitizing (buildOutline), so this does not affect anchors.
+    FORBID_ATTR: ['id', 'name', 'style', 'data-action', 'data-ai-action'],
+  };
+
+  function sanitizeHtml(html) {
+    const source = String(html == null ? '' : html);
+    if (typeof DOMPurify !== 'undefined' && DOMPurify
+        && typeof DOMPurify.sanitize === 'function') {
+      try {
+        return DOMPurify.sanitize(source, SANITIZE_CONFIG);
+      } catch (_) {
+        // Fall through to the fail-closed path below.
+      }
+    }
+    return escapeHtml(source);
+  }
+
+  // ── Render markdown to HTML (always sanitized before returning) ──
+  // A fresh Marked instance per render keeps plugin-option overrides isolated
+  // (marked.use() otherwise mutates global state across renders).
+  function currentPluginSignature() {
+    const po = settings.pluginOptions || {};
+    return [
+      settings.allPlugins !== false ? 'gfm' : 'plain',
+      po.gfmTables !== false ? 1 : 0,
+      po.gfmTaskLists !== false ? 1 : 0,
+      po.gfmStrikethrough !== false ? 1 : 0,
+      po.gfmAutolinks !== false ? 1 : 0,
+    ].join(':');
+  }
+
   function renderMarkdown(raw) {
     if (typeof marked !== 'undefined') {
-      marked.setOptions({
-        gfm: true,
+      const useGfm = settings.allPlugins !== false;
+      const po = settings.pluginOptions || {};
+      const instance = new marked.Marked({
+        gfm: useGfm,
+        // Single-newline breaks are a reader preference, not a GFM extension.
         breaks: true,
-        highlight: function (code, lang) {
-          if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
-            try { return hljs.highlight(code, { language: lang }).value; } catch (e) {}
-          }
-          if (typeof hljs !== 'undefined') {
-            try { return hljs.highlightAuto(code).value; } catch (e) {}
-          }
-          return code;
-        }
+        // marked v15 removed the `highlight` option; highlighting is applied
+        // to the rendered DOM afterwards (highlightCodeBlocks).
       });
-      return marked.parse(raw);
+
+      if (useGfm) {
+        if (po.gfmTables === false) {
+          instance.use({ tokenizer: { table() { return undefined; } } });
+        }
+        if (po.gfmStrikethrough === false) {
+          instance.use({ tokenizer: { del() { return undefined; } } });
+        }
+        if (po.gfmAutolinks === false) {
+          instance.use({ tokenizer: { url() { return undefined; } } });
+        }
+        if (po.gfmTaskLists === false) {
+          instance.use({
+            renderer: {
+              listitem(item) {
+                // `parse` (not parseInline): list items can contain nested
+                // lists / paragraphs, which are block tokens.
+                let body = item.tokens ? this.parser.parse(item.tokens, !!item.loose) : (item.text || '');
+                if (item.task) body = '[' + (item.checked ? 'x' : ' ') + '] ' + body;
+                return '<li>' + body + '</li>';
+              },
+            },
+          });
+        }
+      }
+
+      return sanitizeHtml(instance.parse(raw));
     }
-    return raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    const escaped = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (typeof DOMPurify !== 'undefined' && DOMPurify
+        && typeof DOMPurify.sanitize === 'function') {
+      return sanitizeHtml(escaped.replace(/\n/g, '<br>'));
+    }
+    // No sanitizer at all: escape first, then add line breaks — never the reverse.
+    return escapeHtml(raw).replace(/\n/g, '<br>');
+  }
+
+  // ── Syntax highlighting (marked v15 has no `highlight` option) ──
+  function highlightCodeBlocks(container) {
+    if (typeof hljs === 'undefined' || !container) return;
+    container.querySelectorAll('pre code').forEach(block => {
+      if (block.classList.contains('hljs')) return;
+      try { hljs.highlightElement(block); } catch (_) {}
+    });
   }
 
 // ── Build TOC from rendered headings ──
@@ -476,7 +677,11 @@ function buildOutline(container) {
     const li = document.createElement('li');
     li.className = 'md-outline-item md-outline-h' + outlineLevel;
     li.dataset.targetId = id;
-    li.innerHTML = `<span class="md-outline-text">${headingText}</span>`;
+    // Heading text is untrusted: assign it as text, never as HTML.
+    const outlineText = document.createElement('span');
+    outlineText.className = 'md-outline-text';
+    outlineText.textContent = headingText;
+    li.appendChild(outlineText);
     li.addEventListener('click', () => {
       const target = document.getElementById(id);
       if (target) {
@@ -613,6 +818,7 @@ function buildOutline(container) {
     });
 
     tree.addEventListener('mouseout', e => {
+      clearTimeout(marqueeTimer);
       const item = e.target.closest('.md-tree-item');
       if (!item) return;
       // Only stop when actually leaving the tree item (not moving between children)
@@ -621,59 +827,6 @@ function buildOutline(container) {
       const nameEl = item.querySelector('.md-tree-name');
       if (nameEl) nameEl.classList.remove('marquee');
     });
-  }
-
-  // ── Outline marquee hover — scroll long headings on hover ──
-  function setupOutlineMarquee() {
-    const container = document.querySelector('.md-outline-container');
-    if (!container) return;
-
-    // Use MutationObserver to attach marquee to both existing and future items
-    function attachMarquee(item) {
-      if (item._marqueeAttached) return;
-      item._marqueeAttached = true;
-
-      const textEl = item.querySelector('.md-outline-text');
-      if (!textEl) return;
-
-      let timer = null;
-
-      item.addEventListener('mouseenter', () => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          // Account for item padding — clientWidth includes padding, but text
-          // lives in the content area inside it.
-          const style = getComputedStyle(item);
-          const hPad = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-          const contentWidth = item.clientWidth - hPad;
-          const overflow = textEl.scrollWidth - contentWidth;
-          if (overflow > 0) {
-            const dist = overflow + 10;
-            const dur = Math.max(2, dist / 40);
-            textEl.style.setProperty('--marquee-dist', -dist + 'px');
-            textEl.style.setProperty('--marquee-dur', dur + 's');
-            item.classList.add('marquee');
-          }
-        }, 400);
-      });
-
-      item.addEventListener('mouseleave', () => {
-        clearTimeout(timer);
-        item.classList.remove('marquee');
-      });
-    }
-
-    // Attach to all existing items
-    container.querySelectorAll('.md-outline-item').forEach(attachMarquee);
-
-    // Watch for new items added dynamically (e.g., navigateToFile rebuilds outline)
-    const observer = new MutationObserver(() => {
-      container.querySelectorAll('.md-outline-item:not([data-mq="1"])').forEach(item => {
-        item.dataset.mq = '1';
-        attachMarquee(item);
-      });
-    });
-    observer.observe(container, { childList: true, subtree: true });
   }
 
   function toggleMobileSidebar(sidebar) {
@@ -798,52 +951,74 @@ function buildOutline(container) {
     }
   }
 
-  // ── File Tree ──
+  // ── File Tree ─────────────────────────────────────────────────────────────
+  // One normalised entry model for every source (MR-023):
+  //   { name, path, type: 'file'|'dir', url, isMd, isCurrent }
+  let fileTreeCache = [];
+  let fileTreeCacheUrl = '';
+  let fileTreeLoading = false;
+  let fileTreeRequestId = 0;
+
+  function setTreeCache(entries) {
+    fileTreeCache = Array.isArray(entries) ? entries : [];
+    fileTreeCacheUrl = getCurrentFileInfo().url;
+  }
+
   function buildFileTree() {
-    const treeContainer = document.getElementById('md-file-tree');
-    if (!treeContainer) return;
+    const container = document.getElementById('md-file-tree');
+    if (!container) return;
+    const info = getCurrentFileInfo();
+    // A navigation may land while the previous directory is still loading:
+    // bump the generation so the stale response is discarded.
+    fileTreeLoading = true;
+    const requestId = ++fileTreeRequestId;
+    container.innerHTML = '<div class="md-tree-loading">⏳ Loading files…</div>';
 
-    const fileInfo = getCurrentFileInfo();
-    treeContainer.innerHTML = '';
-
-    if (fileInfo.isGitHub && fileInfo.repoDir) {
-      buildGitHubFileTree(treeContainer, fileInfo);
-    } else {
-      buildSimpleFileTree(treeContainer, fileInfo);
-    }
+    listDirectory(info)
+      .then(entries => {
+        if (requestId !== fileTreeRequestId) return; // stale navigation
+        fileTreeLoading = false;
+        if (!entries || entries.length === 0) { renderTreeError(container, 'No files found in this folder.', info); return; }
+        renderTreeEntries(container, entries, info);
+      })
+      .catch(err => {
+        if (requestId !== fileTreeRequestId) return;
+        fileTreeLoading = false;
+        renderTreeError(container, err && err.message ? err.message : 'Could not list this folder.', info);
+      });
   }
 
-  // ── Enumerate local directory — try direct fetch first, fallback to hidden tab ──
-  async function enumerateLocalDirectory(dirPath) {
-    // Method 1: try to fetch the directory URL directly (works with file:///* permission)
-    try {
-      const response = await fetch(dirPath + '/');
-      const html = await response.text();
-      const parsed = parseDirListing(html, dirPath);
-      if (parsed && parsed.length > 0) {
-        const container = document.getElementById('md-file-tree');
-        if (container) renderDirListing(container, parsed, getCurrentFileInfo());
-        return;
-      }
-    } catch (_) {}
-
-    // Method 2: ask background SW to use a hidden tab
-    if (typeof chrome !== 'undefined' && chrome.runtime) {
-      chrome.runtime.sendMessage({ type: 'enumerateDirectory', url: dirPath }, () => {});
-    }
+  function currentFileEntry(info) {
+    return {
+      name: info.filename,
+      path: info.url,
+      type: 'file',
+      url: info.url,
+      isMd: /\.(md|markdown|mdown|mkd)$/i.test(info.filename),
+      isCurrent: true,
+    };
   }
 
-  // ── Extract filename from a path (handle full paths or relative) ──
-  function basename(p) {
-    return p.replace(/\/+$/, '').split('/').pop() || p;
+  function listDirectory(info) {
+    if (info.isGitHub) return listGitHubDirectory(info);
+    if (info.isGitLab) return listGitLabDirectory(info);
+    if (info.url.includes('bitbucket.org')) return listBitbucketDirectory(info);
+    if (info.isLocal) return listLocalDirectory(info);
+    // Raw URLs have no directory API — show the current file only.
+    return Promise.resolve([currentFileEntry(info)]);
   }
 
-  // ── Parse directory listing HTML into file objects ──
+  function encodePathSegments(pathPart) {
+    // Values come from location.href and are already percent-encoded —
+    // decode before re-encoding to avoid `my%2520dir` (double encoding).
+    return String(pathPart || '').split('/').map(seg => encodeURIComponent(safeDecode(seg))).join('/');
+  }
+
   function parseDirListing(html, dirPath) {
     const div = document.createElement('div');
     div.innerHTML = html;
     const links = div.querySelectorAll('a');
-    const files = [];
+    const entries = [];
     const seen = new Set();
     links.forEach(link => {
       const href = link.getAttribute('href');
@@ -851,178 +1026,221 @@ function buildOutline(container) {
       const name = basename(href);
       if (name === '..' || name === '.' || name === '' || seen.has(name)) return;
       seen.add(name);
-      const filePath = href.startsWith('/') ? 'file://' + href : dirPath + '/' + href;
-      files.push({
+      let full = href;
+      if (!/^(file|https?):\/\//.test(full)) {
+        full = href.startsWith('/') ? 'file://' + href : dirPath + '/' + href;
+      }
+      entries.push({
         name: safeDecode(name),
-        path: filePath,
+        path: full,
+        url: full,
         type: href.endsWith('/') ? 'dir' : 'file',
+        isMd: /\.(md|markdown|mdown|mkd)$/i.test(name),
       });
     });
-    return files.length > 0 ? files : null;
+    return entries.length ? entries : null;
   }
 
-  // ── Render file list into tree container ──
-  function renderDirListing(container, files, fileInfo) {
-    const currentFilename = fileInfo.filename;
-    const dirPath = fileInfo.dir;
-    const header = container.querySelector('.md-tree-item:first-child');
-    container.innerHTML = '';
-    if (header) container.appendChild(header.cloneNode(true));
-
-    // Resolve paths: handle absolute (/...), relative (file.md), or already full
-    const resolved = files.map(f => {
-      let fullPath = f.path;
-      if (!fullPath.startsWith('file://') && !fullPath.startsWith('http://') && !fullPath.startsWith('https://')) {
-        if (fullPath.startsWith('/')) {
-          fullPath = 'file://' + fullPath;
-        } else {
-          fullPath = dirPath + '/' + fullPath;
-        }
-      }
-      return { ...f, path: fullPath };
+  function enumerateViaBackground(dirPath) {
+    return new Promise(resolve => {
+      let settled = false;
+      const done = v => { if (!settled) { settled = true; resolve(v); } };
+      const timer = setTimeout(() => done(null), 6000);
+      try {
+        chrome.runtime.sendMessage({ type: 'enumerateDirectory', url: dirPath }, resp => {
+          clearTimeout(timer);
+          done(resp && resp.success && Array.isArray(resp.files) ? resp.files : null);
+        });
+      } catch (_) { clearTimeout(timer); done(null); }
     });
+  }
 
-    // Sort: dirs first, then files, alphabetically
-    const sorted = [
-      ...resolved.filter(f => f.type === 'dir').sort((a, b) => a.name.localeCompare(b.name)),
-      ...resolved.filter(f => f.type === 'file').sort((a, b) => a.name.localeCompare(b.name)),
-    ];
+  async function listLocalDirectory(info) {
+    // 1) Direct fetch of the directory listing (file:// pages expose one).
+    try {
+      const response = await fetch(info.dir + '/', { cache: 'no-store' });
+      const html = await response.text();
+      const parsed = parseDirListing(html, info.dir);
+      if (parsed) return markCurrent(rebaseLocal(parsed, info), info);
+    } catch (_) {}
 
-    sorted.forEach(item => {
+    // 2) Hidden-tab enumeration through the service worker.
+    const viaTab = await enumerateViaBackground(info.dir);
+    if (viaTab && viaTab.length) {
+      const rebased = viaTab.map(f => {
+        let full = f.path;
+        if (!/^(file|https?):\/\//.test(full)) full = full.startsWith('/') ? 'file://' + full : info.dir + '/' + full;
+        return { ...f, path: full, url: full, isMd: /\.(md|markdown|mdown|mkd)$/i.test(f.name) };
+      });
+      return markCurrent(rebased, info);
+    }
+
+    // 3) Nothing enumerable — be explicit rather than silently showing one file.
+    throw new Error('Could not list this folder. Open it in the browser and retry.');
+  }
+
+  function rebaseLocal(entries, info) {
+    return entries.map(e => {
+      let full = e.path;
+      if (!/^(file|https?):\/\//.test(full)) {
+        full = full.startsWith('/') ? 'file://' + full : info.dir + '/' + full;
+      }
+      return { ...e, path: full, url: full };
+    });
+  }
+
+  function markCurrent(entries, info) {
+    return entries.map(e => ({
+      ...e,
+      isCurrent: e.path === info.url || e.name === info.filename,
+      isMd: !!e.isMd || /\.(md|markdown|mdown|mkd)$/i.test(e.name),
+    }));
+  }
+
+  async function listGitHubDirectory(info) {
+    const match = info.url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)/);
+    if (!match) return [currentFileEntry(info)];
+    const [, owner, repo, branch, filePath] = match;
+    const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodePathSegments(dirPath)}?ref=${encodeURIComponent(branch)}`;
+    const resp = await fetch(apiUrl, { headers: { Accept: 'application/vnd.github.v3+json' }, cache: 'no-store' });
+    if (!resp.ok) throw new Error('GitHub API error (' + resp.status + ')');
+    const items = await resp.json();
+    if (!Array.isArray(items)) throw new Error('GitHub did not return a directory');
+    return items.map(item => {
+      const isDir = item.type === 'dir';
+      const base = isDir ? 'tree' : 'blob';
+      return {
+        name: item.name,
+        path: item.path,
+        url: `https://github.com/${owner}/${repo}/${base}/${branch}/${encodePathSegments(item.path)}`,
+        type: isDir ? 'dir' : 'file',
+        isMd: /\.(md|markdown|mdown|mkd)$/i.test(item.name),
+        isCurrent: item.path === safeDecode(filePath),
+      };
+    });
+  }
+
+  async function listGitLabDirectory(info) {
+    const match = info.url.match(/^https:\/\/([^/]+)\/(.+?)\/-\/blob\/([^/]+)\/(.+)$/);
+    if (!match) return [currentFileEntry(info)];
+    const [, host, project, branch, filePath] = match;
+    const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+    const apiUrl = `https://${host}/api/v4/projects/${encodeURIComponent(project)}/repository/tree`
+      + `?ref=${encodeURIComponent(branch)}&per_page=100`
+      + (dirPath ? `&path=${encodeURIComponent(safeDecode(dirPath))}` : '');
+    const resp = await fetch(apiUrl, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('GitLab API error (' + resp.status + ')');
+    const items = await resp.json();
+    if (!Array.isArray(items)) throw new Error('GitLab did not return a directory');
+    return items.map(item => {
+      const isDir = item.type === 'tree';
+      const base = isDir ? 'tree' : 'blob';
+      return {
+        name: item.name,
+        path: item.path,
+        url: `https://${host}/${project}/-/${base}/${branch}/${encodePathSegments(item.path)}`,
+        type: isDir ? 'dir' : 'file',
+        isMd: /\.(md|markdown|mdown|mkd)$/i.test(item.name),
+        isCurrent: item.path === safeDecode(filePath),
+      };
+    });
+  }
+
+  async function listBitbucketDirectory(info) {
+    const match = info.url.match(/^https:\/\/bitbucket\.org\/([^/]+)\/([^/]+)\/src\/([^/]+)\/(.+)/);
+    if (!match) return [currentFileEntry(info)];
+    const [, workspace, repo, ref, filePath] = match;
+    const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+    const apiUrl = `https://api.bitbucket.org/2.0/repositories/${workspace}/${repo}/src/${ref}/`
+      + (dirPath ? encodePathSegments(dirPath.replace(/\/+$/, '')) + '/' : '')
+      + '?pagelen=100';
+    const resp = await fetch(apiUrl, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('Bitbucket API error (' + resp.status + ')');
+    const json = await resp.json();
+    const items = Array.isArray(json.values) ? json.values : [];
+    return items.map(item => {
+      const isDir = item.type === 'commit_directory';
+      return {
+        name: (item.path || '').split('/').pop(),
+        path: item.path,
+        url: `https://bitbucket.org/${workspace}/${repo}/src/${ref}/${encodePathSegments(item.path)}`,
+        type: isDir ? 'dir' : 'file',
+        isMd: /\.(md|markdown|mdown|mkd)$/i.test(item.path || ''),
+        isCurrent: item.path === safeDecode(filePath),
+      };
+    });
+  }
+
+  function renderTreeEntries(container, entries, info) {
+    container.innerHTML = '';
+
+    // Directory header
+    const header = document.createElement('div');
+    header.className = 'md-tree-item md-tree-header';
+    header.textContent = '📁 ' + (info.isLocal || info.isGitHub || info.isGitLab || info.url.includes('bitbucket.org')
+      ? (info.dir.split('/').pop() || '/')
+      : (info.filename || 'File'));
+    container.appendChild(header);
+
+    const dirs = entries.filter(e => e.type === 'dir').sort((a, b) => a.name.localeCompare(b.name));
+    const files = entries.filter(e => e.type !== 'dir').sort((a, b) => a.name.localeCompare(b.name));
+
+    [...dirs, ...files].forEach(entry => {
       const el = document.createElement('div');
-      const isCurrent = item.name === currentFilename;
-      const isMd = item.type === 'file' && (item.name.endsWith('.md') || item.name.endsWith('.markdown'));
       let cls = 'md-tree-item';
-      if (isCurrent) cls += ' md-tree-active';
-      else if (item.type === 'file' && !isMd) cls += ' md-tree-nonmd';
+      if (entry.isCurrent) cls += ' md-tree-active';
+      else if (entry.type === 'file' && !entry.isMd) cls += ' md-tree-nonmd';
       el.className = cls;
+      el.dataset.path = entry.path || '';
+      el.innerHTML = `<span class="md-tree-icon">${entry.type === 'dir' ? '📁' : (entry.isMd ? '📄' : '📎')}</span>`
+        + `<span class="md-tree-name"><span class="md-tree-text">${escapeHtml(entry.name)}${entry.type === 'dir' ? '/' : ''}</span></span>`;
 
-      if (item.type === 'dir') {
-        el.innerHTML = `<span class="md-tree-icon">📁</span><span class="md-tree-name"><span class="md-tree-text">${item.name}/</span></span>`;
-        el.addEventListener('click', e => { e.stopPropagation(); window.location.href = item.path; });
-      } else {
-        el.innerHTML = `<span class="md-tree-icon">${isMd ? '📄' : '📎'}</span><span class="md-tree-name"><span class="md-tree-text">${item.name}</span></span>`;
-        if (isMd && !isCurrent) {
-          el.addEventListener('click', e => {
-            e.stopPropagation();
-            navigateToFile(item.path);
-          });
-        }
+      if (entry.type === 'dir') {
+        el.addEventListener('click', () => { window.location.href = entry.url; });
+      } else if (entry.isCurrent) {
+        // current file — no navigation
+      } else if (entry.isMd) {
+        // Soft navigation for every source: navigateToFile converts provider
+        // blob/src URLs to their raw counterpart before fetching.
+        el.addEventListener('click', () => navigateToFile(entry.url));
       }
       container.appendChild(el);
     });
+
+    setTreeCache(entries);
   }
 
-  // ── Simple file tree (non-GitHub pages) ──
-  function buildSimpleFileTree(container, fileInfo) {
-    // Directory header
-    const dirName = fileInfo.dir.split('/').pop() || '/';
-    const dirLabel = document.createElement('div');
-    dirLabel.className = 'md-tree-item';
-    dirLabel.style.cssText = 'font-size:11px;font-weight:600;color:var(--md-text-muted);padding:6px 14px;text-transform:uppercase;letter-spacing:0.3px;border-bottom:1px solid var(--md-sidebar-border);margin-bottom:2px;cursor:default;';
-    dirLabel.textContent = `📁 ${dirName}`;
-    container.appendChild(dirLabel);
+  function renderTreeError(container, message, info) {
+    container.innerHTML = '';
+    const header = document.createElement('div');
+    header.className = 'md-tree-item md-tree-header';
+    header.textContent = '📁 ' + (info.dir.split('/').pop() || '/');
+    container.appendChild(header);
 
-    // Loading state while enumerating directory
-    const loading = document.createElement('div');
-    loading.className = 'md-tree-loading';
-    loading.textContent = '⏳ Loading files…';
-    container.appendChild(loading);
+    const current = document.createElement('div');
+    current.className = 'md-tree-item md-tree-active';
+    current.innerHTML = `<span class="md-tree-icon">📄</span><span class="md-tree-name"><span class="md-tree-text">${escapeHtml(info.filename)}</span></span>`;
+    container.appendChild(current);
 
-    // Current file (highlighted, shown immediately)
-    const currentFile = document.createElement('div');
-    currentFile.className = 'md-tree-item md-tree-active';
-    currentFile.innerHTML = `<span class="md-tree-icon">📄</span><span class="md-tree-name"><span class="md-tree-text">${fileInfo.filename}</span></span>`;
-    container.appendChild(currentFile);
-
-    // Try to list local directory contents via background SW (hidden tab)
-    enumerateLocalDirectory(fileInfo.dir);
-  }
-
-  // ── GitHub file tree via GitHub Contents API ──
-  function buildGitHubFileTree(container, fileInfo) {
-    // Parse: https://github.com/owner/repo/blob/branch/path/to/file.md
-    const match = fileInfo.url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)/);
-    if (!match) { buildSimpleFileTree(container, fileInfo); return; }
-
-    const owner = match[1];
-    const repo = match[2];
-    const branch = match[3];
-    const filePath = match[4];
-    const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
-
-    // Loading state
-    container.innerHTML = '<div class="md-tree-loading">⏳ Loading files…</div>';
-
-    // Fetch directory from GitHub Contents API (supports CORS)
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${dirPath}?ref=${encodeURIComponent(branch)}`;
-
-    fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github.v3+json' } })
-      .then(r => { if (!r.ok) throw new Error('API error'); return r.json(); })
-      .then(items => {
-        if (!Array.isArray(items)) throw new Error('Not a directory');
-        container.innerHTML = '';
-
-        // Directory header
-        const dirLabel = document.createElement('div');
-        dirLabel.className = 'md-tree-item';
-        dirLabel.style.cssText = 'font-size:11px;font-weight:600;color:var(--md-text-muted);padding:6px 14px;text-transform:uppercase;letter-spacing:0.3px;border-bottom:1px solid var(--md-sidebar-border);margin-bottom:2px;cursor:default;';
-        dirLabel.textContent = `📁 ${dirPath || '/'}`;
-        container.appendChild(dirLabel);
-
-        // Parent directory
-        if (dirPath) {
-          const parentPath = dirPath.includes('/') ? dirPath.substring(0, dirPath.lastIndexOf('/')) : '';
-          const parentUrl = `https://github.com/${owner}/${repo}/tree/${branch}/${parentPath}`;
-          const parentItem = document.createElement('div');
-          parentItem.className = 'md-tree-item';
-          parentItem.innerHTML = '<span class="md-tree-icon">📁</span> ..';
-          parentItem.addEventListener('click', () => { window.location.href = parentUrl; });
-          container.appendChild(parentItem);
-        }
-
-        // Sort: dirs first, then files
-        const sorted = [
-          ...items.filter(i => i.type === 'dir').sort((a, b) => a.name.localeCompare(b.name)),
-          ...items.filter(i => i.type === 'file').sort((a, b) => a.name.localeCompare(b.name))
-        ];
-
-        sorted.forEach(item => {
-          const el = document.createElement('div');
-          const isCurrent = item.path === filePath;
-          let className = 'md-tree-item' + (isCurrent ? ' md-tree-active' : '');
-
-          if (item.type === 'dir') {
-            el.className = className;
-            el.innerHTML = `<span class="md-tree-icon">📁</span><span class="md-tree-name"><span class="md-tree-text">${item.name}</span></span>`;
-            el.addEventListener('click', () => {
-              window.location.href = `https://github.com/${owner}/${repo}/tree/${branch}/${item.path}`;
-            });
-          } else {
-            const isMd = item.name.endsWith('.md') || item.name.endsWith('.markdown');
-            if (!isMd) className += ' md-tree-nonmd';
-            el.className = className;
-            el.innerHTML = `<span class="md-tree-icon">${isMd ? '📄' : '📎'}</span><span class="md-tree-name"><span class="md-tree-text">${item.name}</span></span>`;
-            if (isMd && !isCurrent) {
-              el.addEventListener('click', () => {
-                window.location.href = `https://github.com/${owner}/${repo}/blob/${branch}/${item.path}`;
-              });
-            }
-          }
-          container.appendChild(el);
-        });
-      })
-      .catch(() => {
-        // Fallback
-        container.innerHTML = '';
-        buildSimpleFileTree(container, fileInfo);
-      });
+    const empty = document.createElement('div');
+    empty.className = 'md-tree-empty';
+    empty.textContent = message;
+    const retry = document.createElement('button');
+    retry.className = 'md-tree-retry';
+    retry.textContent = 'Retry';
+    retry.addEventListener('click', () => { fileTreeLoading = false; buildFileTree(); });
+    empty.appendChild(retry);
+    container.appendChild(empty);
+    setTreeCache([currentFileEntry(info)]);
   }
 
   // ── Settings panel (feature toggles from screenshot) ──
   function buildSettingsPanel() {
     const list = document.getElementById('md-settings-list');
     if (!list) return;
+
+    const accentColor = () => resolveTheme(settings.theme) === 'dark' ? '#6785e0' : '#607cd2';
 
     // Read / write a toggle value. AI feature prefs are top-level since v1.3.0.
     function getSetting(key) {
@@ -1041,14 +1259,14 @@ function buildOutline(container) {
     const aiConfigured = !!(settings.ai && settings.ai.configured);
     const features = [
       { key: 'allPlugins', label: 'All Built-in Markdown Plugins', desc: 'Enable GFM tables, task lists, strikethrough, etc.' },
+      { key: 'pluginOptions', label: 'Markdown plugin options', desc: 'Configure individual markdown extensions', type: 'pluginOptions' },
       { key: 'showOutline', label: 'Auto-generate Outline', desc: 'Automatically create table of contents from headings' },
       { key: 'autoRefresh', label: 'Auto-refresh Document', desc: 'Automatically reload when file changes (local files)' },
       { key: 'centerContent', label: 'Center Document Content', desc: 'Center the rendered content horizontally' },
-      { key: 'contentWidth', label: 'Custom Content Width', desc: 'Set maximum content width in pixels', type: 'number' },
-      { key: 'customCSS', label: 'Custom CSS', desc: 'Add your own CSS styles', type: 'textarea' },
-      { key: 'fontSize', label: 'Adjust Font', desc: 'Change font size in pixels', type: 'number' },
+      { key: 'contentWidth', label: 'Custom Content Width', desc: 'Set maximum content width in pixels (400–2000)', type: 'number', toggleKey: 'customWidth' },
+      { key: 'customCSS', label: 'Custom CSS', desc: 'Add your own CSS styles', type: 'textarea', toggleKey: 'customCSSEnabled' },
+      { key: 'fontSize', label: 'Adjust Font', desc: 'Change font size in pixels (12–28)', type: 'number', toggleKey: 'adjustFont' },
       { key: 'showFileTree', label: 'Folder Directory', desc: 'Show file tree sidebar' },
-      { key: 'pluginOptions', label: 'Markdown plugin options', desc: 'Configure individual markdown extensions' },
     ];
     if (aiConfigured) {
       features.push(
@@ -1079,9 +1297,11 @@ function buildOutline(container) {
           </div>
         `;
       } else if (f.type === 'number') {
+        const toggleKey = f.toggleKey || f.key;
+        const enabled = settings[toggleKey] !== false;
         row.innerHTML = `
-          <span class="md-settings-check checked">
-            <svg width="20" height="20" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" fill="none" stroke="${settings.theme === 'dark' ? '#6785e0' : '#607cd2'}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="md-settings-check ${enabled ? 'checked' : ''}" data-toggle="${toggleKey}">
+            <svg width="20" height="20" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" fill="none" stroke="${enabled ? accentColor() : '#9ca3af'}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </span>
           <div class="md-settings-text">
             <div class="md-settings-label">${f.label}</div>
@@ -1090,14 +1310,41 @@ function buildOutline(container) {
           </div>
         `;
       } else if (f.type === 'textarea') {
+        const toggleKey = f.toggleKey || f.key;
+        const enabled = settings[toggleKey] !== false;
+        const cssValue = typeof settings.customCSS === 'string' ? settings.customCSS : '';
         row.innerHTML = `
-          <span class="md-settings-check checked">
-            <svg width="20" height="20" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" fill="none" stroke="${settings.theme === 'dark' ? '#6785e0' : '#607cd2'}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="md-settings-check ${enabled ? 'checked' : ''}" data-toggle="${toggleKey}">
+            <svg width="20" height="20" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" fill="none" stroke="${enabled ? accentColor() : '#9ca3af'}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </span>
           <div class="md-settings-text">
             <div class="md-settings-label">${f.label}</div>
             <div class="md-settings-desc">${f.desc}</div>
-            <textarea class="md-settings-textarea" data-key="${f.key}" rows="3" placeholder="e.g. .md-content h1 { color: red; }">${settings[f.key] || ''}</textarea>
+            <textarea class="md-settings-textarea" data-key="${f.key}" rows="3" placeholder="e.g. .md-content h1 { color: red; }">${escapeHtml(cssValue)}</textarea>
+          </div>
+        `;
+      } else if (f.type === 'pluginOptions') {
+        const po = settings.pluginOptions || {};
+        const master = settings.allPlugins !== false;
+        const options = [
+          ['gfmTables', 'Tables'],
+          ['gfmTaskLists', 'Task lists'],
+          ['gfmStrikethrough', 'Strikethrough'],
+          ['gfmAutolinks', 'Autolinks'],
+        ];
+        row.innerHTML = `
+          <span class="md-settings-check md-settings-check-info">🧩</span>
+          <div class="md-settings-text">
+            <div class="md-settings-label">${f.label}</div>
+            <div class="md-settings-desc">${f.desc}</div>
+            <div class="md-settings-plugin-list">
+              ${options.map(([k, label]) => `
+                <label class="md-settings-plugin-option">
+                  <input type="checkbox" data-plugin-option="${k}" ${po[k] !== false ? 'checked' : ''} ${master ? '' : 'disabled'} />
+                  <span>${label}</span>
+                </label>`).join('')}
+            </div>
+            ${master ? '' : '<div class="md-settings-desc">Turn on “All Built-in Markdown Plugins” to configure these.</div>'}
           </div>
         `;
       } else if (f.type === 'aiLang') {
@@ -1114,7 +1361,7 @@ function buildOutline(container) {
         `;
       } else {
         const isChecked = getSetting(f.key);
-        const accent = settings.theme === 'dark' ? '#6785e0' : '#607cd2';
+        const accent = accentColor();
         row.innerHTML = `
           <span class="md-settings-check ${isChecked ? 'checked' : ''}" data-toggle="${f.key}">
             <svg width="20" height="20" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" fill="none" stroke="${isChecked ? accent : '#9ca3af'}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1136,11 +1383,13 @@ function buildOutline(container) {
         const newVal = !getSetting(key);
         setSetting(key, newVal);
         check.classList.toggle('checked', newVal);
-        const accent = settings.theme === 'dark' ? '#6785e0' : '#607cd2';
+        const accent = accentColor();
         const svg = check.querySelector('polyline');
         if (svg) svg.setAttribute('stroke', newVal ? accent : '#9ca3af');
         saveSettings();
         applySettings();
+        broadcastOwnSettings();
+        if (key === 'allPlugins') buildSettingsPanel();
       });
     });
 
@@ -1150,26 +1399,92 @@ function buildOutline(container) {
         settings.targetLang = sel.value;
         saveSettings();
         applySettings();
+        broadcastOwnSettings();
       });
     });
 
     // Number inputs
     list.querySelectorAll('.md-settings-number').forEach(input => {
       input.addEventListener('change', () => {
-        settings[input.dataset.key] = parseInt(input.value);
+        const key = input.dataset.key;
+        let v = parseInt(input.value, 10);
+        if (!Number.isFinite(v)) { input.value = String(settings[input.dataset.key] || ''); return; }
+        if (key === 'fontSize') v = Math.min(28, Math.max(12, v));
+        else if (key === 'contentWidth') v = Math.min(2000, Math.max(400, v));
+        settings[key] = v;
+        input.value = String(v);
         saveSettings();
         applySettings();
+        broadcastOwnSettings();
       });
     });
 
-    // Textarea
+    // Textarea (custom CSS is always a string — never a boolean)
     list.querySelectorAll('.md-settings-textarea').forEach(ta => {
       ta.addEventListener('change', () => {
-        settings[ta.dataset.key] = ta.value;
+        if (ta.dataset.key === 'customCSS') {
+          settings.customCSS = String(ta.value || '');
+        } else {
+          settings[ta.dataset.key] = ta.value;
+        }
         saveSettings();
-        applyCustomCSS();
+        applySettings();
+        broadcastOwnSettings();
       });
     });
+
+    // Per-extension plugin options
+    list.querySelectorAll('[data-plugin-option]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        settings.pluginOptions = settings.pluginOptions || { ...DEFAULT_PLUGIN_OPTIONS };
+        settings.pluginOptions[cb.dataset.pluginOption] = cb.checked;
+        saveSettings();
+        applySettings();
+        broadcastOwnSettings();
+      });
+    });
+  }
+
+  let appliedPluginSignature = null;
+
+  // Re-render the current document, preserving scroll position and any active
+  // search (used by plugin switches and auto-refresh).
+  function rerenderDocument(raw, opts) {
+    const inner = document.querySelector('.md-content-inner');
+    if (!inner || typeof raw !== 'string') return;
+    const scrollEl = document.querySelector('.md-content');
+    const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
+    const query = (document.querySelector('.md-search-input') || {}).value || '';
+
+    inner.innerHTML = renderMarkdown(raw);
+    highlightCodeBlocks(inner);
+    buildOutline(inner);
+    addCopyButtons();
+    applyCustomCSS();
+
+    // Re-run the search first (it scrolls to the first match), then restore the
+    // reader's scroll position so a refresh never pulls the page away.
+    if (query.trim()) performSearch(query.trim());
+    if (scrollEl) {
+      const prevBehavior = scrollEl.style.scrollBehavior;
+      scrollEl.style.scrollBehavior = 'auto';
+      scrollEl.scrollTop = scrollTop;
+      void scrollEl.offsetHeight;
+      scrollEl.style.scrollBehavior = prevBehavior;
+    }
+    if (opts && opts.banner !== false) renderAIBanner();
+  }
+
+  function applyTheme() {
+    const root = document.getElementById('md-reader-root');
+    if (!root) return;
+    const resolved = resolveTheme(settings.theme);
+    root.setAttribute('data-theme', resolved);
+    root.setAttribute('data-theme-mode', settings.theme === 'auto' ? 'auto' : 'fixed');
+    const darkFamily = ['dark', 'nord', 'dracula', 'tokyo-night'].includes(resolved);
+    root.setAttribute('data-theme-family', darkFamily ? 'dark' : 'light');
+    const btn = root.querySelector('[data-action="toggle-theme"]');
+    if (btn) btn.title = 'Theme: ' + (settings.theme === 'auto' ? 'Auto (follows system)' : settings.theme) + ' — click to cycle';
   }
 
   // ── Apply settings to UI ──
@@ -1177,16 +1492,18 @@ function buildOutline(container) {
     const root = document.getElementById('md-reader-root');
     if (!root) return;
 
-    root.setAttribute('data-theme', sanitizeTheme(settings.theme));
+    applyTheme();
 
     const content = document.querySelector('.md-content');
-    if (content) content.style.fontSize = settings.fontSize + 'px';
+    if (content) content.style.fontSize = (settings.adjustFont === false ? 16 : Number(settings.fontSize) || 16) + 'px';
 
     const inner = document.querySelector('.md-content-inner');
     if (inner) {
       inner.classList.toggle('md-centered', settings.centerContent);
-      if (settings.contentWidth) {
-        inner.style.maxWidth = settings.contentWidth + 'px';
+      if (settings.customWidth !== false && settings.contentWidth) {
+        inner.style.maxWidth = Number(settings.contentWidth) + 'px';
+      } else {
+        inner.style.maxWidth = '';
       }
     }
 
@@ -1199,52 +1516,88 @@ function buildOutline(container) {
       if (outlineSidebar) outlineSidebar.classList.toggle('md-collapsed', !settings.showOutline);
     }
 
-    // Auto-refresh
+    // Auto-refresh only runs for file:// documents — don't claim otherwise.
     const indicator = document.getElementById('md-auto-refresh');
-    if (indicator) indicator.style.display = settings.autoRefresh ? '' : 'none';
+    const autoRefreshActive = !!settings.autoRefresh && currentDocumentUrl().startsWith('file://');
+    if (indicator) indicator.style.display = autoRefreshActive ? '' : 'none';
 
     if (settings.autoRefresh) startAutoRefresh();
     else stopAutoRefresh();
 
-    // Re-render markdown if plugins setting changed
-    if (settings.allPlugins && typeof marked !== 'undefined') {
-      marked.setOptions({ gfm: true, breaks: true });
+    // Re-render markdown when the plugin switches change the rendered output.
+    const signature = currentPluginSignature();
+    if (appliedPluginSignature !== null && signature !== appliedPluginSignature && cachedRawMarkdown) {
+      rerenderDocument(cachedRawMarkdown);
     }
+    appliedPluginSignature = signature;
 
     applyCustomCSS();
   }
 
   function applyCustomCSS() {
     let styleEl = document.getElementById('md-custom-css');
-    if (!styleEl && settings.customCSS) {
+    const css = typeof settings.customCSS === 'string' ? settings.customCSS : '';
+    const enabled = settings.customCSSEnabled !== false && css.trim() !== '';
+    if (!styleEl && enabled) {
       styleEl = document.createElement('style');
       styleEl.id = 'md-custom-css';
       document.head.appendChild(styleEl);
     }
-    if (styleEl) styleEl.textContent = settings.customCSS || '';
+    if (styleEl) styleEl.textContent = enabled ? css : '';
   }
 
   // ── Auto-refresh ──
+  // The reader replaces the page DOM, so the original <pre> is gone. The first
+  // render caches the raw markdown; the interval re-reads the file from disk
+  // and diffs against that cache (MR-018).
   let refreshTimer = null;
-  let lastContent = '';
+  let refreshInFlight = false;
+
+  function currentDocumentUrl() {
+    return (_readerFileUrl || window.location.href).split('#')[0];
+  }
+
+  function readLocalFile(url) {
+    return new Promise(resolve => {
+      // Direct fetch works for file:// pages when the extension has file
+      // access; `cache: no-store` makes Chrome re-read the file from disk.
+      fetch(url, { cache: 'no-store' })
+        .then(r => (r.ok ? r.text() : null))
+        .then(text => {
+          if (typeof text === 'string') return resolve(text);
+          resolveViaBackground();
+        })
+        .catch(resolveViaBackground);
+
+      function resolveViaBackground() {
+        try {
+          chrome.runtime.sendMessage({ type: 'readFile', url }, resp => {
+            resolve(resp && resp.success && typeof resp.text === 'string' ? resp.text : null);
+          });
+        } catch (_) { resolve(null); }
+      }
+    });
+  }
 
   function startAutoRefresh() {
     stopAutoRefresh();
-    if (!window.location.href.startsWith('file://')) return;
+    if (!currentDocumentUrl().startsWith('file://')) return;
 
-    lastContent = getRawMarkdownFromPage() || '';
-    refreshTimer = setInterval(() => {
-      const current = getRawMarkdownFromPage();
-      if (current && current !== lastContent) {
-        lastContent = current;
-        const inner = document.querySelector('.md-content-inner');
-        if (inner) {
-          inner.innerHTML = renderMarkdown(current);
-          buildOutline(inner);
-          addCopyButtons();
+    refreshTimer = setInterval(async () => {
+      // Don't re-read disk for a background tab.
+      if (document.visibilityState === 'hidden') return;
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        const current = await readLocalFile(currentDocumentUrl());
+        if (typeof current === 'string' && current !== cachedRawMarkdown) {
+          cachedRawMarkdown = current;
+          rerenderDocument(current);
         }
+      } finally {
+        refreshInFlight = false;
       }
-    }, settings.refreshInterval);
+    }, Math.max(1000, Number(settings.refreshInterval) || 3000));
   }
 
   function stopAutoRefresh() {
@@ -1252,6 +1605,45 @@ function buildOutline(container) {
       clearInterval(refreshTimer);
       refreshTimer = null;
     }
+  }
+
+  // Keep the popup in sync when the reader changes a setting itself.
+  function broadcastOwnSettings() {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        chrome.runtime.sendMessage({ type: 'settingsUpdated', settings }).catch(() => {});
+      }
+    } catch (_) {}
+  }
+
+  // MR-022 — open the pre-reader page in a new tab. Raw sources are shown in
+  // view-source so the reader doesn't intercept them again.
+  function openOriginalPage() {
+    if (!originalPageUrl) return;
+    let target = originalPageUrl;
+    if (detectedPageType === 'local') {
+      target = 'view-source:' + originalPageUrl;
+    } else if (detectedPageType === 'raw-url') {
+      // `view-source:` is stripped by some Chrome builds; a marker query shows
+      // the untouched raw document without the reader intercepting it again.
+      try {
+        const u = new URL(originalPageUrl);
+        u.searchParams.set('pagesew', 'original');
+        target = u.href;
+      } catch (_) {}
+    }
+    try {
+      chrome.runtime.sendMessage({ type: 'openTab', url: target });
+    } catch (_) {
+      try { window.open(target, '_blank', 'noopener'); } catch (__) {}
+    }
+  }
+
+  // MR-024 — ask the SW to open the side panel for this tab.
+  function openSidePanel() {
+    try {
+      chrome.runtime.sendMessage({ type: 'openSidePanel' });
+    } catch (_) {}
   }
 
   // ── Event handlers ──
@@ -1296,23 +1688,40 @@ function buildOutline(container) {
           break;
 
         case 'toggle-theme': {
-          // 亮系主题（light / light-indigo）↔ dark 二段切换
-          settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
-          root.setAttribute('data-theme', sanitizeTheme(settings.theme));
+          // Three-state cycle: light → dark → auto → light. Any named theme
+          // (dracula etc.) drops to light on the first click.
+          const cur = settings.theme;
+          if (cur === 'light') settings.theme = 'dark';
+          else if (cur === 'dark') settings.theme = 'auto';
+          else settings.theme = 'light';
+          applyTheme();
           saveSettings();
+          broadcastOwnSettings();
           break;
         }
 
         case 'font-dec':
+          if (settings.adjustFont === false) break;
           settings.fontSize = Math.max(12, settings.fontSize - 1);
           document.querySelector('.md-content').style.fontSize = settings.fontSize + 'px';
           saveSettings();
+          broadcastOwnSettings();
           break;
 
         case 'font-inc':
+          if (settings.adjustFont === false) break;
           settings.fontSize = Math.min(28, settings.fontSize + 1);
           document.querySelector('.md-content').style.fontSize = settings.fontSize + 'px';
           saveSettings();
+          broadcastOwnSettings();
+          break;
+
+        case 'open-original':
+          openOriginalPage();
+          break;
+
+        case 'browse-files':
+          openSidePanel();
           break;
 
         case 'go-to-top':
@@ -1320,6 +1729,12 @@ function buildOutline(container) {
           break;
 
         case 'summarize-all': {
+          if (settings.enableSummary === false) {
+            aiShowPanel();
+            aiSetTitle('summarize');
+            aiSetHint('AI 总结已关闭，可在设置中重新开启。');
+            break;
+          }
           const inner = document.querySelector('.md-content-inner');
           let docText = inner ? inner.innerText : '';
           if (docText.length > 12000) docText = docText.slice(0, 12000) + '\n\n[…已截断，原文过长…]';
@@ -1445,6 +1860,7 @@ function buildOutline(container) {
 
   // ── Replace page with reader UI ──
   function replacePageWithReader(rawMarkdown) {
+    cachedRawMarkdown = rawMarkdown;
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     document.body.style.margin = '0';
@@ -1467,12 +1883,10 @@ function buildOutline(container) {
     // Build TOC
     const contentInner = document.querySelector('.md-content-inner');
     if (contentInner) {
+      highlightCodeBlocks(contentInner);
       buildOutline(contentInner);
       addCopyButtons();
     }
-
-    // Setup hover marquees for outline and file tree
-    setupOutlineMarquee();
 
     // Build file tree
     buildFileTree();
@@ -1503,6 +1917,18 @@ function buildOutline(container) {
     applySettings();
     // Ask the SW whether a model key exists (single source of truth for "configured").
     reconcileAIConfig();
+
+    // Tell the SW this tab is a reader, for the side-panel file browser.
+    announceReader();
+  }
+
+  // Register this tab with the service worker (MR-024). Safe to call twice.
+  function announceReader() {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime) return;
+      const info = getCurrentFileInfo();
+      chrome.runtime.sendMessage({ type: 'readerReady', url: info.url, filename: info.filename }).catch(() => {});
+    } catch (_) {}
   }
 
   // ── AI assistant (selection popover + streaming result panel) ──
@@ -1559,6 +1985,7 @@ function buildOutline(container) {
       }
     });
     inner.insertBefore(banner, inner.firstChild);
+    updateAIBanner();
   }
 
   function updateAIBanner() {
@@ -1569,8 +1996,7 @@ function buildOutline(container) {
   }
 
   function aiEscapeHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return escapeHtml(s);
   }
 
   function setupAI() {
@@ -1982,8 +2408,8 @@ function buildOutline(container) {
         loadingEl.innerHTML = `
           <div style="color:#e76f51;font-size:14px;text-align:center;max-width:300px;">
             <div style="font-size:18px;margin-bottom:8px;">❌ Failed to load markdown</div>
-            <div style="margin-bottom:12px;color:#6b7280;">${err.message}</div>
-            <a href="${rawUrl}" target="_blank" style="color:#607cd2;text-decoration:underline;">Open raw file →</a>
+            <div style="margin-bottom:12px;color:#6b7280;">${escapeHtml(err.message)}</div>
+            <a href="${escapeHtml(rawUrl)}" target="_blank" style="color:#607cd2;text-decoration:underline;">Open raw file →</a>
           </div>
         `;
       }
@@ -1993,6 +2419,7 @@ function buildOutline(container) {
   // ── Main initialization ──
   async function init() {
     const pageType = detectPageType();
+    detectedPageType = pageType.type;
 
     switch (pageType.type) {
       case 'none':
@@ -2021,7 +2448,27 @@ function buildOutline(container) {
           reconcileAIConfig();
         }
         if (msg.type === 'requestFileTree') {
-          sendResponse({ data: [] });
+          // MR-024: the side panel asks for the tree the reader already built.
+          const info = getCurrentFileInfo();
+          const readerActive = !!document.getElementById('md-reader-root');
+          const respond = () => sendResponse({
+            readerActive,
+            data: readerActive ? (fileTreeCache.length ? fileTreeCache : [currentFileEntry(info)]) : [],
+            url: fileTreeCacheUrl || info.url,
+            filename: info.filename,
+          });
+          if (fileTreeLoading) {
+            // A directory enumeration is in flight — wait for it so the panel
+            // never receives the previous file's tree.
+            const started = Date.now();
+            const poll = () => {
+              if (!fileTreeLoading || Date.now() - started > 5000) respond();
+              else setTimeout(poll, 150);
+            };
+            poll();
+            return true;
+          }
+          respond();
         }
         if (msg.type === 'navigateToFile' && msg.path) {
           navigateToFile(msg.path);
@@ -2041,13 +2488,19 @@ function buildOutline(container) {
             sendResponse({ type: 'none' });
           }
         }
-        // Directory listing from background SW (hidden tab)
+        // Legacy directory listing broadcast from the background SW.
         if (msg.type === 'directoryList') {
           const container = document.getElementById('md-file-tree');
           if (!container) return;
           const files = msg.files;
           if (!files || files.length === 0) return;
-          renderDirListing(container, files, getCurrentFileInfo());
+          const info = getCurrentFileInfo();
+          const entries = markCurrent(files.map(f => {
+            let full = f.path;
+            if (!/^(file|https?):\/\//.test(full)) full = full.startsWith('/') ? 'file://' + full : info.dir + '/' + full;
+            return { ...f, path: full, url: full, isMd: /\.(md|markdown|mdown|mkd)$/i.test(f.name) };
+          }), info);
+          renderTreeEntries(container, entries, info);
         }
       });
     }

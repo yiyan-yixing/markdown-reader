@@ -126,6 +126,19 @@
 }
 
 /* ── Toolbar ── */
+.md-btn-theme { position: relative; }
+.md-theme-auto-badge {
+  display: none;
+  position: absolute;
+  left: 2px;
+  bottom: 1px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--md-primary);
+}
+#md-reader-root[data-theme-mode="auto"] .md-theme-auto-badge { display: inline; }
+
 .md-toolbar {
   display: flex;
   align-items: center;
@@ -230,8 +243,15 @@
 }
 
 /* ── Theme icons ── */
-[data-theme="light"] .md-icon-moon { display: none; }
-[data-theme="dark"] .md-icon-sun { display: none; }
+[data-theme="light"] .md-icon-moon,
+[data-theme="light-indigo"] .md-icon-moon,
+[data-theme="solarized"] .md-icon-moon,
+[data-theme-family="light"] .md-icon-moon { display: none; }
+[data-theme="dark"] .md-icon-sun,
+[data-theme="nord"] .md-icon-sun,
+[data-theme="dracula"] .md-icon-sun,
+[data-theme="tokyo-night"] .md-icon-sun,
+[data-theme-family="dark"] .md-icon-sun { display: none; }
 
 /* ── Search box ── */
 .md-search-box {
@@ -456,6 +476,40 @@
   background: var(--md-text-secondary);
 }
 
+/* Unified tree states (MR-023) */
+.md-tree-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--md-text-muted);
+  padding: 8px 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid var(--md-sidebar-border);
+  margin-bottom: 2px;
+  cursor: default;
+}
+
+.md-tree-empty {
+  padding: 14px;
+  color: var(--md-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.md-tree-retry {
+  display: block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--md-border);
+  border-radius: var(--md-radius-sm);
+  background: var(--md-surface);
+  color: var(--md-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.md-tree-retry:hover { background: var(--md-surface-hover); }
+
 /* Loading indicator for file tree */
 .md-tree-loading,
 .md-tree-item-loading {
@@ -488,22 +542,18 @@
   color: var(--md-text-secondary);
   transition: all 0.15s;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  /* MR-025: long headings wrap to at most two lines, then ellipsis. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
   border-left: 2px solid transparent;
 }
 
 .md-outline-text {
-  display: inline-block;
-  white-space: nowrap;
-}
-
-/* Outline marquee: scroll long headings like file tree */
-.md-outline-item.marquee {
-  text-overflow: clip;
-}
-.md-outline-item.marquee .md-outline-text {
-  animation: marquee-scroll var(--marquee-dur, 3s) linear infinite;
+  display: inline;
+  white-space: normal;
 }
 
 .md-outline-item:hover {
@@ -520,13 +570,16 @@
 }
 
 /* Heading indent levels with clear visual cascade
-   ∈ weight / size / opacity / indent all step down noticeably */
+   ∈ weight / size / opacity / indent all step down noticeably.
+   MR-026: indentation steps by the golden ratio — 0.618em measured against
+   the 13px outline base size (8.034px). Font sizes still taper per level. */
+.md-outline-list { --md-outline-indent-step: 8.034px; }
 .md-outline-h1 { padding-left: 14px; font-weight: 800; font-size: 14px; opacity: 1; }
-.md-outline-h2 { padding-left: 32px; font-weight: 700; font-size: 13.5px; opacity: 0.95; }
-.md-outline-h3 { padding-left: 50px; font-weight: 600; font-size: 12.5px; opacity: 0.85; }
-.md-outline-h4 { padding-left: 66px; font-weight: 500; font-size: 12px; opacity: 0.75; }
-.md-outline-h5 { padding-left: 82px; font-weight: 400; font-size: 11.5px; opacity: 0.6; }
-.md-outline-h6 { padding-left: 98px; font-weight: 350; font-size: 11px; opacity: 0.45; }
+.md-outline-h2 { padding-left: calc(14px + var(--md-outline-indent-step) * 1); font-weight: 700; font-size: 13.5px; opacity: 0.95; }
+.md-outline-h3 { padding-left: calc(14px + var(--md-outline-indent-step) * 2); font-weight: 600; font-size: 12.5px; opacity: 0.85; }
+.md-outline-h4 { padding-left: calc(14px + var(--md-outline-indent-step) * 3); font-weight: 500; font-size: 12px; opacity: 0.75; }
+.md-outline-h5 { padding-left: calc(14px + var(--md-outline-indent-step) * 4); font-weight: 400; font-size: 11.5px; opacity: 0.6; }
+.md-outline-h6 { padding-left: calc(14px + var(--md-outline-indent-step) * 5); font-weight: 350; font-size: 11px; opacity: 0.45; }
 
 .md-outline-empty {
   padding: 16px;

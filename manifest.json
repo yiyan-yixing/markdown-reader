@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Markdown Reader",
-  "version": "1.3.0",
-  "description": "Beautiful Markdown reader with outline, file tree, 7 themes (Light / Indigo / Dark / Nord / Solarized / Dracula / Tokyo Night), AI translation & summarization (bring your own model). Intercepts .md URLs and GitHub/GitLab/Bitbucket blob pages.",
+  "name": "PageSew",
+  "short_name": "PageSew",
+  "version": "1.3.1",
+  "description": "Opens .md files and direct Markdown links in a three-pane reader with outline, folder view, themes, search, and optional AI help.",
   "permissions": [
-    "activeTab",
     "storage",
     "sidePanel",
     "scripting",
@@ -42,14 +42,17 @@
   "content_scripts": [
     {
       "matches": [
-        "file:///*",
+        "file:///*.md",
+        "file:///*.markdown",
+        "file:///*.mdown",
+        "file:///*.mkd",
         "*://*/*.md",
         "*://*/*.markdown",
         "*://*/*.mdown",
-        "*://*/*.mkd",
-        "*://*/*.md*"
+        "*://*/*.mkd"
       ],
       "js": [
+        "lib/dompurify.min.js",
         "lib/marked.min.js",
         "lib/highlight.min.js",
         "content/content.js"
@@ -57,8 +60,10 @@
       "css": [
         "content/content.css",
         "styles/reader.css",
+        "lib/hljs-light.css",
         "styles/themes/dark.css",
         "styles/themes/light.css",
+        "lib/hljs-dark.css",
         "styles/ai.css"
       ],
       "run_at": "document_idle"

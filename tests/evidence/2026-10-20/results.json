@@ -1,0 +1,330 @@
+{
+  "ranAt": "2026-10-23T08:26:30.160Z",
+  "extId": "khpoiohihjloebninbpokomjlnlcjmhp",
+  "results": [
+    {
+      "id": "MR-001",
+      "name": "Three-panel layout with independently collapsible sidebars",
+      "status": "PASS",
+      "ms": 994,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-001-three-panel.png"
+      ]
+    },
+    {
+      "id": "MR-002",
+      "name": "Smart interception: file:// auto, raw .md auto, GitHub blob button",
+      "status": "PASS",
+      "ms": 544,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-002-github-blob-button.png",
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-002-blob-reader.png"
+      ]
+    },
+    {
+      "id": "MR-003",
+      "name": "GFM tables, task lists, strikethrough, autolinks",
+      "status": "PASS",
+      "ms": 269,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-003-gfm.png"
+      ]
+    },
+    {
+      "id": "MR-004",
+      "name": "Outline from h1-h6 + click scroll + scroll tracking",
+      "status": "PASS",
+      "ms": 1590,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-004-outline.png"
+      ]
+    },
+    {
+      "id": "MR-005",
+      "name": "Center Document Content",
+      "status": "PASS",
+      "ms": 959,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-005-center.png"
+      ]
+    },
+    {
+      "id": "MR-006",
+      "name": "Custom content width 400–2000px",
+      "status": "PASS",
+      "ms": 1207,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-006-width.png"
+      ]
+    },
+    {
+      "id": "MR-007",
+      "name": "Font size 12–28px controls with clamping",
+      "status": "PASS",
+      "ms": 1399,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-007-font.png"
+      ]
+    },
+    {
+      "id": "MR-008",
+      "name": "Search with match count and Enter/Shift+Enter navigation",
+      "status": "PASS",
+      "ms": 1322,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-008-search.png"
+      ]
+    },
+    {
+      "id": "MR-009",
+      "name": "Copy code button copies exact code text",
+      "status": "PASS",
+      "ms": 426,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-009-copy.png"
+      ]
+    },
+    {
+      "id": "MR-010",
+      "name": "Keyboard shortcuts: Cmd/Ctrl+F, Enter, Shift+Enter, Escape",
+      "status": "PASS",
+      "ms": 1225,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-010-shortcuts.png"
+      ]
+    },
+    {
+      "id": "MR-011",
+      "name": "Collapsible sidebars individually and hide-all",
+      "status": "PASS",
+      "ms": 1594,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-011-sidebars.png"
+      ]
+    },
+    {
+      "id": "MR-012",
+      "name": "Responsive overlays at <=960px (outside click / ESC dismiss)",
+      "status": "PASS",
+      "ms": 1572,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-012-responsive.png"
+      ]
+    },
+    {
+      "id": "MR-013",
+      "name": "Loading overlay while fetching GitHub blob, removed on render",
+      "status": "PASS",
+      "ms": 1499,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-013-loading-overlay.png",
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-013-rendered.png"
+      ]
+    },
+    {
+      "id": "MR-014",
+      "name": "Heading anchor hover + click copies permalink and scrolls",
+      "status": "PASS",
+      "ms": 1033,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-014-anchor.png"
+      ]
+    },
+    {
+      "id": "MR-015",
+      "name": "Go-to-top appears after 640px and returns to top",
+      "status": "PASS",
+      "ms": 2416,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-015-go-top-clicked.png"
+      ]
+    },
+    {
+      "id": "MR-016",
+      "name": "Seven themes apply data-theme and distinct --md-bg",
+      "status": "PASS",
+      "ms": 2071,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-016-theme-dracula.png"
+      ]
+    },
+    {
+      "id": "MR-027",
+      "name": "AI translate + whole-document summarize over the real SW proxy",
+      "status": "PASS",
+      "ms": 1201,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-027-ai.png"
+      ]
+    },
+    {
+      "id": "SEC-001",
+      "name": "Markdown cannot claim reader ids/names or inject inline styles",
+      "status": "PASS",
+      "ms": 185,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/SEC-001-sanitize.png"
+      ]
+    },
+    {
+      "id": "MR-017",
+      "name": "Auto theme follows prefers-color-scheme + three-state toolbar cycle",
+      "status": "PASS",
+      "ms": 2219,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-017-auto-theme.png"
+      ]
+    },
+    {
+      "id": "MR-018",
+      "name": "Auto-refresh re-reads the file, preserving scroll and search",
+      "status": "PASS",
+      "ms": 2309,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-018-auto-refresh.png"
+      ]
+    },
+    {
+      "id": "MR-019",
+      "name": "Per-extension markdown plugin options (tables / tasks / strike / autolinks)",
+      "status": "PASS",
+      "ms": 2264,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-019-plugin-options.png"
+      ]
+    },
+    {
+      "id": "MR-020",
+      "name": "Custom CSS enable flag is separate from the CSS string (plus migration)",
+      "status": "PASS",
+      "ms": 1841,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-020-custom-css.png"
+      ]
+    },
+    {
+      "id": "MR-021",
+      "name": "Every settings toggle has an observable effect",
+      "status": "PASS",
+      "ms": 6401,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-021-toggles.png"
+      ]
+    },
+    {
+      "id": "MR-021b",
+      "name": "AI feature toggles gate translate and summarize",
+      "status": "PASS",
+      "ms": 1642,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-021b-ai-toggles.png"
+      ]
+    },
+    {
+      "id": "MR-022",
+      "name": "External link opens the original page per source type",
+      "status": "PASS",
+      "ms": 1202,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-022-external-link.png"
+      ]
+    },
+    {
+      "id": "MR-023a",
+      "name": "Local file tree lists sibling files and navigates",
+      "status": "PASS",
+      "ms": 323,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-023-local-tree.png"
+      ]
+    },
+    {
+      "id": "MR-023b",
+      "name": "GitHub / GitLab / Bitbucket trees use provider APIs",
+      "status": "PASS",
+      "ms": 558,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-023-providers.png"
+      ]
+    },
+    {
+      "id": "MR-023d",
+      "name": "Provider paths with spaces are encoded exactly once",
+      "status": "PASS",
+      "ms": 263,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-023d-encoded-path.png"
+      ]
+    },
+    {
+      "id": "MR-023c",
+      "name": "Tree failure shows an explicit empty state with Retry",
+      "status": "PASS",
+      "ms": 276,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-023-tree-error.png"
+      ]
+    },
+    {
+      "id": "MR-024",
+      "name": "Side panel browser lists cached reader files and navigates",
+      "status": "PASS",
+      "ms": 689,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-024-side-panel.png"
+      ]
+    },
+    {
+      "id": "MR-024b",
+      "name": "Remote side panel ignores non-reader tabs and navigates provider files",
+      "status": "PASS",
+      "ms": 614,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-024b-remote-panel.png"
+      ]
+    },
+    {
+      "id": "MR-024c",
+      "name": "Rapid file clicks cannot let a slow response overwrite the latest",
+      "status": "PASS",
+      "ms": 1414,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-024c-nav-race.png"
+      ]
+    },
+    {
+      "id": "MR-025",
+      "name": "TOC headings clamp to two lines with an ellipsis",
+      "status": "PASS",
+      "ms": 256,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-025-outline-clamp.png"
+      ]
+    },
+    {
+      "id": "MR-026",
+      "name": "TOC indentation steps by 0.618em per heading level",
+      "status": "PASS",
+      "ms": 268,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-026-golden-indent.png"
+      ]
+    },
+    {
+      "id": "MR-028",
+      "name": "highlight.js adds tokens and theme-specific colors",
+      "status": "PASS",
+      "ms": 2132,
+      "screenshots": [
+        "/Users/zhanglei/yycc/eng/markdown-reader/tests/evidence/2026-10-20/MR-028-highlight.png"
+      ]
+    },
+    {
+      "id": "MR-027b",
+      "name": "Host permission is ensured on vendor, key, test and config-close",
+      "status": "PASS",
+      "ms": 3288,
+      "screenshots": []
+    }
+  ]
+}

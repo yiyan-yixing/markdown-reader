@@ -45,6 +45,33 @@ const ROOT_DIR        = path.resolve(__dirname, '..');
 const SCREENSHOT_DIR  = path.resolve(__dirname, 'screenshots');
 const SAMPLE_MD_PATH  = path.join(ROOT_DIR, 'sample.md');
 const SAMPLE_MD       = fs.readFileSync(SAMPLE_MD_PATH, 'utf-8');
+const MALICIOUS_MD = [
+  '# Security Fixture',
+  '',
+  '- item one',
+  '- item two',
+  '',
+  '**bold text**',
+  '',
+  '<img id="xss-img" src="x" onerror="window.__xssFired = true; document.title = \'XSS_IMG\';">',
+  '',
+  '<svg id="xss-svg" onload="window.__xssFired = true; document.title = \'XSS_SVG\'"></svg>',
+  '',
+  '<a id="xss-js-link" href="javascript:window.__xssFired = true; document.title = \'XSS_JS\'">click me</a>',
+  '',
+  '<iframe id="xss-iframe" src="about:blank" onload="window.__xssFired = true; document.title = \'XSS_IFRAME\'"></iframe>',
+  '',
+  '<style id="xss-style">body { background: rgb(255, 0, 0) !important; }</style>',
+  '',
+  '<script>window.__xssFired = true; document.title = "XSS_SCRIPT";</script>',
+  '',
+  '<object data="data:text/html,<script>parent.__xssFired=true;</script>"></object>',
+  '',
+  '<embed src="data:text/html,<script>parent.__xssFired=true;</script>">',
+  '',
+  '<div id="xss-inline-handler" onclick="window.__xssFired = true; document.title = \'XSS_CLICK\'">clickable</div>',
+  '',
+].join('\n');
 const USER_DATA_DIR   = path.join(os.tmpdir(), 'md-reader-test-' + Date.now());
 const TEST_TIMEOUT    = 15000;
 const HEADLESS        = process.env.HEADLESS === 'true';
@@ -95,11 +122,12 @@ function startServer() {
   return new Promise(function (resolve) {
     var srv = http.createServer(function (req, res) {
       if (req.url.indexOf('.md') !== -1) {
+        var body = req.url.indexOf('malicious.md') !== -1 ? MALICIOUS_MD : SAMPLE_MD;
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(
           '<html><head></head><body>' +
           '<pre style="word-wrap:break-word;white-space:pre-wrap;">' +
-          SAMPLE_MD.replace(/&/g, '&amp;').replace(/</g, '&lt;') +
+          body.replace(/&/g, '&amp;').replace(/</g, '&lt;') +
           '</pre></body></html>'
         );
       } else {
@@ -156,7 +184,8 @@ function makeChromeMock(settings) {
     '          var ok = window.__mdAiMockOk !== false;',
     '          setTimeout(function() {',
     '            if (ok) {',
-    '              msgListeners.forEach(function(fn) { fn({ type: "chunk", text: "这是一个模拟结果（test）。\\n- 要点一\\n- 要点二" }); });',
+    '              var chunk = window.__mdAiMockChunk || "这是一个模拟结果（test）。\\n- 要点一\\n- 要点二";',
+    '              msgListeners.forEach(function(fn) { fn({ type: "chunk", text: chunk }); });',
     '              msgListeners.forEach(function(fn) { fn({ type: "done" }); });',
     '            } else {',
     '              msgListeners.forEach(function(fn) { fn({ type: "error", error: "模拟调用失败" }); });',
@@ -172,7 +201,10 @@ function makeChromeMock(settings) {
     '};',
     'window.chrome.storage = window.chrome.storage || {',
     '  sync: {',
-    '    get: function(keys, cb) { if (cb) setTimeout(function() { cb({ mdReaderSettings: ' + stored + ' }); }, 0); },',
+    '    get: function(keys, cb) { if (cb) setTimeout(function() {',
+    '      // No saved settings at all mimics a fresh install (no storage key).',
+    '      cb(' + (settings ? '{ mdReaderSettings: ' + stored + ' }' : '{}') + ');',
+    '    }, 0); },',
     '    set: function() {},',
     '    remove: function() {},',
     '    clear: function() {},',
@@ -203,6 +235,10 @@ async function prepareReaderPage(p, settings) {
   // Mock chrome APIs
   await p.addInitScript({
     content: makeChromeMock(settings),
+  });
+  // DOMPurify (bundled locally; loaded before content.js, like the manifest)
+  await p.addInitScript({
+    content: fs.readFileSync(path.join(ROOT_DIR, 'lib/dompurify.min.js'), 'utf-8'),
   });
   // marked
   await p.addInitScript({
@@ -296,6 +332,7 @@ async function main() {
   // Start HTTP server
   await startServer();
   var MD_URL = serverUrl + '/sample.md';
+  var MAL_URL = serverUrl + '/malicious.md';
 
   // Launch browser
   console.log('  Launching Chromium...');
@@ -318,7 +355,7 @@ async function main() {
     await injectCSS(p);
 
     var text = await p.textContent('.md-content-inner');
-    if (text.indexOf('Markdown Reader') === -1) throw new Error('Expected "Markdown Reader"');
+    if (text.indexOf('PageSew') === -1) throw new Error('Expected "PageSew"');
     if (text.indexOf('Sample Document') === -1) throw new Error('Expected "Sample Document"');
     if (text.indexOf('Features') === -1) throw new Error('Expected "Features"');
     if (text.indexOf('function greet') === -1) throw new Error('Expected JS code');
@@ -420,19 +457,22 @@ async function main() {
   // =====================================================================
   //  07  Theme toggle
   // =====================================================================
-  await runTest('07. Theme toggles light / dark', async function () {
-    var theme = await page.getAttribute('#md-reader-root', 'data-theme');
-    var init = theme;
+  await runTest('07. Theme cycles light / dark / auto', async function () {
+    var mode = await page.getAttribute('#md-reader-root', 'data-theme-mode');
+    if (mode !== 'auto') throw new Error('New installs should default to auto, got mode=' + mode);
 
     await page.click('[data-action="toggle-theme"]');
     await page.waitForTimeout(200);
-    theme = await page.getAttribute('#md-reader-root', 'data-theme');
-    if (theme === init) throw new Error('Theme unchanged');
+    if (await page.getAttribute('#md-reader-root', 'data-theme') !== 'light') throw new Error('First click should select light');
 
     await page.click('[data-action="toggle-theme"]');
     await page.waitForTimeout(200);
-    theme = await page.getAttribute('#md-reader-root', 'data-theme');
-    if (theme !== init) throw new Error('Theme not restored');
+    if (await page.getAttribute('#md-reader-root', 'data-theme') !== 'dark') throw new Error('Second click should select dark');
+
+    await page.click('[data-action="toggle-theme"]');
+    await page.waitForTimeout(200);
+    mode = await page.getAttribute('#md-reader-root', 'data-theme-mode');
+    if (mode !== 'auto') throw new Error('Third click should return to auto');
   });
 
   // =====================================================================
@@ -546,13 +586,15 @@ async function main() {
       await popup.waitForSelector('.popup-container', { timeout: 5000 });
 
       var title = await popup.textContent('.popup-title');
-      if (title.indexOf('Markdown Reader') === -1) throw new Error('Title mismatch: "' + title + '"');
+      if (title.indexOf('PageSew') === -1) throw new Error('Title mismatch: "' + title + '"');
 
       var feat = await popup.$$('.popup-feature');
       if (feat.length < 5) throw new Error('Expected >=5 features, got ' + feat.length);
 
       var btns = await popup.$$('.popup-theme-btn');
-      if (btns.length !== 7) throw new Error('Expected 7 theme buttons (all free since v1.2.0), got ' + btns.length);
+      if (btns.length !== 8) throw new Error('Expected 8 theme buttons (7 themes + Auto), got ' + btns.length);
+      var autoBtn = await popup.$('.popup-theme-btn[data-theme="auto"]');
+      if (!autoBtn) throw new Error('Auto theme button missing');
 
       var proBadges = await popup.$$('.popup-pro-badge');
       if (proBadges.length !== 0) throw new Error('Pro badges should be gone, got ' + proBadges.length);
@@ -1120,6 +1162,116 @@ async function main() {
     }
   });
 
+
+  // =====================================================================
+  //  24  Stored XSS: malicious markdown must not execute
+  // =====================================================================
+  await runTest('24. Malicious markdown is sanitized (no script execution)', async function () {
+    var p = await context.newPage();
+    await p.addInitScript({
+      content:
+        'window.__xssFired = false;' +
+        'document.addEventListener("DOMContentLoaded", function() {' +
+        '  document.title = "MD Reader Security Test";' +
+        '});',
+    });
+    await prepareReaderPage(p);
+    await p.goto(MAL_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('.md-content-inner', { timeout: 10000 });
+    await injectCSS(p);
+    await p.waitForTimeout(600); // give any surviving img/svg handler time to fire
+
+    try {
+      var fired = await p.evaluate(function () { return window.__xssFired === true; });
+      if (fired) throw new Error('A malicious handler executed (window.__xssFired = true)');
+      var title = await p.title();
+      if (title !== 'MD Reader Security Test') {
+        throw new Error('document.title was changed by injected script: ' + title);
+      }
+
+      // No inline event-handler attributes may survive.
+      var handlerCount = await p.$$eval('.md-content-inner *', function (els) {
+        return els.reduce(function (n, el) {
+          return n + Array.prototype.filter.call(el.attributes, function (a) {
+            return /^on/i.test(a.name);
+          }).length;
+        }, 0);
+      });
+      if (handlerCount > 0) throw new Error(handlerCount + ' inline event handler attribute(s) survived');
+
+      // Dangerous elements must be removed.
+      var badEls = await p.$$eval('.md-content-inner iframe, .md-content-inner style, .md-content-inner script, .md-content-inner object, .md-content-inner embed', function (els) {
+        return els.map(function (el) { return el.tagName.toLowerCase(); });
+      });
+      if (badEls.length > 0) throw new Error('Dangerous element(s) survived: ' + badEls.join(','));
+
+      // javascript: URLs must be neutralised.
+      var jsLinks = await p.$$eval('.md-content-inner a[href]', function (els) {
+        return els.filter(function (el) {
+          return /^\s*javascript:/i.test(el.getAttribute('href') || '');
+        }).length;
+      });
+      if (jsLinks > 0) throw new Error(jsLinks + ' javascript: link(s) survived');
+
+      // Clicking the (sanitised) link must not run anything.
+      var link = await p.$('#xss-js-link');
+      if (link) {
+        await link.click().catch(function () {});
+        await p.waitForTimeout(150);
+        var firedAfterClick = await p.evaluate(function () { return window.__xssFired === true; });
+        if (firedAfterClick) throw new Error('Handler fired after clicking the link');
+      }
+
+      // Normal markdown must still render.
+      var h1 = await p.textContent('.md-content-inner h1');
+      if (!h1 || h1.indexOf('Security Fixture') === -1) throw new Error('Heading missing after sanitize');
+    } finally {
+      await p.close();
+    }
+  });
+
+  // =====================================================================
+  //  25  AI output goes through the same sanitizer
+  // =====================================================================
+  await runTest('25. AI result output is sanitized', async function () {
+    var p = await context.newPage();
+    await p.addInitScript({
+      content:
+        'window.__xssFired = false;' +
+        'window.__mdAiMockChunk = "# AI Result\\n\\n- bullet one\\n\\n' +
+        '<img id=\\"ai-xss-img\\" src=\\"x\\" onerror=\\"window.__xssFired = true\\">\\n\\n' +
+        '<a id=\\"ai-xss-link\\" href=\\"javascript:window.__xssFired = true\\">bad link</a>";',
+    });
+    await prepareReaderPage(p);
+    await p.goto(MD_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('.md-content-inner', { timeout: 10000 });
+    await injectCSS(p);
+    try {
+      await p.click('[data-action="summarize-all"]');
+      await p.waitForFunction(function () {
+        var body = document.getElementById('md-ai-body');
+        return body && body.querySelector('h1');
+      }, { timeout: 10000 });
+      await p.waitForTimeout(400);
+
+      var fired = await p.evaluate(function () { return window.__xssFired === true; });
+      if (fired) throw new Error('AI output executed a handler');
+      var handlerCount = await p.$$eval('#md-ai-body *', function (els) {
+        return els.reduce(function (n, el) {
+          return n + Array.prototype.filter.call(el.attributes, function (a) {
+            return /^on/i.test(a.name);
+          }).length;
+        }, 0);
+      });
+      if (handlerCount > 0) throw new Error(handlerCount + ' AI-output handler attribute(s) survived');
+      var jsLinks = await p.$$eval('#md-ai-body a[href]', function (els) {
+        return els.filter(function (el) { return /^\s*javascript:/i.test(el.getAttribute('href') || ''); }).length;
+      });
+      if (jsLinks > 0) throw new Error(jsLinks + ' AI-output javascript: link(s) survived');
+    } finally {
+      await p.close();
+    }
+  });
 
   printSummary();
 }

@@ -37,10 +37,10 @@ jobs:
       - name: Create ZIP archive
         run: |
           cd dist
-          zip -r ../markdown-reader-${{ inputs.version }}.zip .
+          zip -r ../pagesew-${{ inputs.version }}.zip .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: markdown-reader-${{ inputs.version }}
-          path: markdown-reader-${{ inputs.version }}.zip
+          name: pagesew-${{ inputs.version }}
+          path: pagesew-${{ inputs.version }}.zip

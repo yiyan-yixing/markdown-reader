@@ -1,6 +1,6 @@
-# Markdown Reader — Sample Document
+# PageSew — Sample Document
 
-This is a **sample Markdown file** to demonstrate the Markdown Reader Chrome extension.
+This is a **sample Markdown file** to demonstrate the PageSew Chrome extension.
 
 ## Features
 
@@ -21,7 +21,7 @@ This is a **sample Markdown file** to demonstrate the Markdown Reader Chrome ext
 ```javascript
 function greet(name) {
   console.log(`Hello, ${name}!`);
-  return { message: `Welcome to Markdown Reader` };
+  return { message: `Welcome to PageSew` };
 }
 
 const reader = greet('World');
@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 @dataclass
 class MarkdownReader:
-    name: str = "Markdown Reader"
+    name: str = "PageSew"
     version: str = "1.0.0"
     features: list = None
 
@@ -81,4 +81,4 @@ class MarkdownReader:
 
 ---
 
-*This file is part of the Markdown Reader Chrome extension.*
+*This file is part of the PageSew Chrome extension.*

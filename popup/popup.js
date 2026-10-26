@@ -5,8 +5,14 @@
 (function () {
   'use strict';
 
+  const DEFAULT_PLUGIN_OPTIONS = {
+    gfmTables: true,
+    gfmTaskLists: true,
+    gfmStrikethrough: true,
+    gfmAutolinks: true,
+  };
   const DEFAULTS = {
-    theme: 'light',
+    theme: 'auto',
     fontSize: 16,
     contentWidth: 800,
     centerContent: true,
@@ -15,7 +21,11 @@
     allSidebarsHidden: false,
     autoRefresh: false,
     customCSS: '',
+    customCSSEnabled: true,
+    customWidth: true,
+    adjustFont: true,
     allPlugins: true,
+    pluginOptions: { ...DEFAULT_PLUGIN_OPTIONS },
     // AI feature preferences are top-level (v1.3.0); the `ai` object holds only
     // the model connection (vendor / provider / baseUrl / model).
     targetLang: '中文',
@@ -45,12 +55,14 @@
     'aiSummary',
   ];
 
-  // Derive an http(s) origin string from a URL (used to request host permission).
+  // Derive an http(s) origin pattern from a URL. Extension host-permission
+  // patterns do not accept ports, so the port is intentionally dropped
+  // (http://127.0.0.1:11434 → http://127.0.0.1).
   function originFromUrl(url) {
     try {
       const u = new URL(String(url || '').trim());
       if (!u.protocol.startsWith('http')) return '';
-      return u.origin;
+      return u.protocol + '//' + u.hostname;
     } catch (_) { return ''; }
   }
 
@@ -69,7 +81,12 @@
   // Load settings
   function loadSettings(cb) {
     chrome.storage.sync.get('mdReaderSettings', result => {
-      const settings = { ...DEFAULTS, ...(result.mdReaderSettings || {}) };
+      const saved = result.mdReaderSettings || null;
+      const settings = { ...DEFAULTS, ...(saved || {}) };
+      settings.ai = { ...DEFAULTS.ai, ...((saved && saved.ai) || {}) };
+      // MR-017: existing installs without a saved theme keep the legacy light
+      // default; `auto` is only the default for a fresh install.
+      if (saved && saved.theme === undefined) settings.theme = 'light';
       // v1.3.0: AI feature prefs moved out of settings.ai.* to the top level.
       const ai = settings.ai || {};
       if (settings.targetLang === undefined && ai.targetLang !== undefined) settings.targetLang = ai.targetLang;
@@ -78,6 +95,24 @@
       delete ai.targetLang;
       delete ai.enableTranslate;
       delete ai.enableSummary;
+
+      // MR-020 migration: an older popup stored a boolean in `customCSS`,
+      // wiping user CSS. Move the intent to `customCSSEnabled`.
+      if (typeof settings.customCSS === 'boolean') {
+        settings.customCSSEnabled = settings.customCSS;
+        settings.customCSS = '';
+      }
+      if (typeof settings.customCSS !== 'string') settings.customCSS = '';
+      if (typeof settings.customCSSEnabled !== 'boolean') settings.customCSSEnabled = true;
+      if (typeof settings.customWidth !== 'boolean') settings.customWidth = true;
+      if (typeof settings.adjustFont !== 'boolean') settings.adjustFont = true;
+
+      // MR-019: normalise per-extension plugin options.
+      const po = (settings.pluginOptions && typeof settings.pluginOptions === 'object') ? settings.pluginOptions : {};
+      settings.pluginOptions = { ...DEFAULT_PLUGIN_OPTIONS };
+      Object.keys(DEFAULT_PLUGIN_OPTIONS).forEach(k => {
+        if (typeof po[k] === 'boolean') settings.pluginOptions[k] = po[k];
+      });
       cb(settings);
     });
   }
@@ -142,7 +177,7 @@
         // Already auto-intercepted
         if (statusText) statusText.textContent = '✅ Reader active';
       } else {
-        if (statusText) statusText.textContent = 'Not a markdown page';
+        if (statusText) statusText.textContent = 'Not a Markdown page — open a .md file or a direct .md link, or try the sample below';
       }
     } else {
       // Content script responded
@@ -175,7 +210,18 @@
       const done = document.getElementById('aiDoneBtn');
       if (done) {
         done.style.display = '';
-        done.addEventListener('click', () => {
+        done.addEventListener('click', async () => {
+          // MR-027: guarantee endpoint access before leaving the config page.
+          try {
+            const baseUrlInput = document.getElementById('aiBaseUrl');
+            if (chrome.permissions && baseUrlInput) {
+              const providerSel = document.getElementById('aiProvider');
+              const typed = (baseUrlInput.value || '').trim()
+                || (providerSel && providerSel.value === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1');
+              const origin = originFromUrl(typed);
+              if (origin) await chrome.permissions.request({ origins: [origin + '/*'] });
+            }
+          } catch (_) {}
           // Hand off to the SW: it closes this tab and focuses the reading tab.
           try { chrome.runtime.sendMessage({ type: 'aiConfigDone' }); } catch (_) {}
           // Self-close fallback (harmless if the SW already closed this tab).
@@ -188,6 +234,16 @@
       }
     }
 
+    // Reviewability: open a bundled public sample so the reader can be seen
+    // without hunting for a local .md file or toggling file-URL access first.
+    const sampleBtn = document.getElementById('popupTrySample');
+    if (sampleBtn) {
+      sampleBtn.addEventListener('click', () => {
+        chrome.tabs.create({ url: 'https://raw.githubusercontent.com/yiyan-yixing/markdown-reader/main/sample.md' });
+        window.close();
+      });
+    }
+
     // Detect tab state first
     detectTabState();
 
@@ -198,6 +254,7 @@
 
       let isOn;
       if (key === 'autoRefresh') isOn = settings.autoRefresh;
+      else if (key === 'customCSS') isOn = settings.customCSSEnabled !== false;
       else if (key === 'aiTranslate') isOn = settings.enableTranslate !== false;
       else if (key === 'aiSummary') isOn = settings.enableSummary !== false;
       else isOn = settings[key] !== false;
@@ -212,10 +269,41 @@
     const widthInput = document.getElementById('contentWidth');
     if (widthInput) widthInput.value = settings.contentWidth || 800;
 
+    // Custom CSS textarea (string, independent from the enable toggle)
+    const customCssInput = document.getElementById('customCSS');
+    if (customCssInput) customCssInput.value = settings.customCSS || '';
+
+    // Reflect which controls are actually live.
+    function syncControlAvailability() {
+      const widthInput = document.getElementById('contentWidth');
+      if (widthInput) widthInput.disabled = settings.customWidth === false;
+      const fontDisabled = settings.adjustFont === false;
+      ['fontDec', 'fontInc'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.disabled = fontDisabled;
+      });
+    }
+    syncControlAvailability();
+
+    // Per-extension plugin options
+    function syncPluginOptionInputs() {
+      const master = settings.allPlugins !== false;
+      document.querySelectorAll('[data-plugin-option]').forEach(cb => {
+        const k = cb.dataset.pluginOption;
+        cb.checked = (settings.pluginOptions || {})[k] !== false;
+        cb.disabled = !master;
+      });
+    }
+    syncPluginOptionInputs();
+
     // Theme buttons
     document.querySelectorAll('.popup-theme-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.theme === settings.theme);
     });
+
+    // Controls inside a feature row must not toggle the row itself.
+    document.querySelectorAll('.popup-feature input, .popup-feature textarea, .popup-feature select')
+      .forEach(el => el.addEventListener('click', e => e.stopPropagation()));
 
     // Toggle feature clicks
     document.querySelectorAll('.popup-feature[data-key]').forEach(feature => {
@@ -233,12 +321,29 @@
           settings.autoRefresh = !isCurrentlyOn;
         } else if (key === 'customWidth') {
           settings.customWidth = !isCurrentlyOn;
+        } else if (key === 'adjustFont') {
+          settings.adjustFont = !isCurrentlyOn;
+        } else if (key === 'customCSS') {
+          // Dedicated boolean — never write true/false into the CSS string.
+          settings.customCSSEnabled = !isCurrentlyOn;
+        } else if (key === 'pluginOptions') {
+          // Master toggle for the individual GFM extensions (never replace the
+          // object with a boolean).
+          const next = !isCurrentlyOn;
+          settings.pluginOptions = settings.pluginOptions || { ...DEFAULT_PLUGIN_OPTIONS };
+          Object.keys(DEFAULT_PLUGIN_OPTIONS).forEach(k => { settings.pluginOptions[k] = next; });
         } else if (key === 'aiTranslate') {
           settings.enableTranslate = !isCurrentlyOn;
         } else if (key === 'aiSummary') {
           settings.enableSummary = !isCurrentlyOn;
         } else {
           settings[key] = !isCurrentlyOn;
+        }
+        if (key === 'allPlugins' || key === 'pluginOptions') {
+          syncPluginOptionInputs();
+        }
+        if (key === 'customWidth' || key === 'adjustFont') {
+          syncControlAvailability();
         }
 
         saveSettings(settings);
@@ -248,6 +353,7 @@
 
     // Font size buttons
     document.getElementById('fontDec')?.addEventListener('click', () => {
+      if (settings.adjustFont === false) return;
       settings.fontSize = Math.max(12, settings.fontSize - 1);
       document.getElementById('fontSizeDisplay').textContent = settings.fontSize;
       saveSettings(settings);
@@ -255,6 +361,7 @@
     });
 
     document.getElementById('fontInc')?.addEventListener('click', () => {
+      if (settings.adjustFont === false) return;
       settings.fontSize = Math.min(28, settings.fontSize + 1);
       document.getElementById('fontSizeDisplay').textContent = settings.fontSize;
       saveSettings(settings);
@@ -263,9 +370,38 @@
 
     // Content width
     document.getElementById('contentWidth')?.addEventListener('change', e => {
-      settings.contentWidth = parseInt(e.target.value) || 800;
+      const parsed = parseInt(e.target.value, 10);
+      settings.contentWidth = Math.min(2000, Math.max(400, Number.isFinite(parsed) ? parsed : 800));
+      e.target.value = String(settings.contentWidth);
       saveSettings(settings);
       broadcastSettings(settings);
+    });
+
+    // Custom CSS textarea
+    document.getElementById('customCSS')?.addEventListener('change', e => {
+      settings.customCSS = String(e.target.value || '');
+      saveSettings(settings);
+      broadcastSettings(settings);
+    });
+
+    // Per-extension plugin option checkboxes
+    document.querySelectorAll('[data-plugin-option]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        settings.pluginOptions = settings.pluginOptions || { ...DEFAULT_PLUGIN_OPTIONS };
+        settings.pluginOptions[cb.dataset.pluginOption] = cb.checked;
+        saveSettings(settings);
+        broadcastSettings(settings);
+      });
+    });
+
+    // Browse files → Chrome side panel (needs a user gesture; this click is it)
+    document.getElementById('popupBrowseFiles')?.addEventListener('click', async () => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab || !tab.id) return;
+        await chrome.sidePanel.open({ tabId: tab.id });
+        window.close();
+      } catch (_) {}
     });
 
     // Theme buttons — all 7 themes are free and apply directly
@@ -352,26 +488,44 @@
       broadcastSettings(settings);
     }
 
-    async function maybeRequestHostPermission(baseUrl) {
-      if (!chrome.permissions) return; // unsupported (e.g. test mock)
-      const origin = originFromUrl(baseUrl);
-      if (!origin) return;
-      try {
-        const has = await chrome.permissions.contains({ origins: [origin + '/*'] });
-        if (!has) await chrome.permissions.request({ origins: [origin + '/*'] });
-      } catch (_) {}
+    // MR-027: one place that guarantees host access before any request can be
+    // made — vendor change, Base URL save, API-key save, test, and closing the
+    // config page all funnel through this.
+    function effectiveBaseUrl(baseUrl) {
+      const typed = String(baseUrl || '').trim();
+      if (typed) return typed;
+      const provider = aiEl.provider ? aiEl.provider.value : 'openai';
+      return provider === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1';
     }
 
-    aiEl.vendor?.addEventListener('change', () => {
+    async function maybeRequestHostPermission(baseUrl) {
+      if (!chrome.permissions) return true; // unsupported (e.g. test mock)
+      const origin = originFromUrl(effectiveBaseUrl(baseUrl));
+      if (!origin) return true;
+      try {
+        // Call request() directly: it returns true without prompting when the
+        // origin is already granted, and avoids consuming the user gesture on
+        // an intervening await.
+        const granted = await chrome.permissions.request({ origins: [origin + '/*'] });
+        return granted !== false;
+      } catch (_) { return false; }
+    }
+
+    aiEl.vendor?.addEventListener('change', async () => {
       const v = AI_VENDORS[aiEl.vendor.value] || AI_VENDORS.custom;
       if (v.protocol) aiEl.provider.value = v.protocol;
       if (v.baseUrl) aiEl.baseUrl.value = v.baseUrl;
       if (aiEl.model) aiEl.model.placeholder = v.modelHint || 'model name';
       syncBaseUrlPlaceholder();
       saveAINonSecret();
+      await maybeRequestHostPermission(aiEl.baseUrl.value);
     });
 
-    aiEl.provider?.addEventListener('change', () => { syncBaseUrlPlaceholder(); saveAINonSecret(); });
+    aiEl.provider?.addEventListener('change', async () => {
+      syncBaseUrlPlaceholder();
+      saveAINonSecret();
+      await maybeRequestHostPermission(aiEl.baseUrl.value);
+    });
     aiEl.baseUrl?.addEventListener('change', async () => {
       // If the typed URL no longer matches the selected preset, fall back to 自定义.
       const cur = AI_VENDORS[aiEl.vendor ? aiEl.vendor.value : 'custom'];
@@ -393,8 +547,10 @@
     });
 
     // API key → local storage only (never put in sync / broadcasts)
-    aiEl.apiKey?.addEventListener('change', () => {
+    aiEl.apiKey?.addEventListener('change', async () => {
       const key = aiEl.apiKey.value;
+      // Saving the key is a user gesture → the right moment to secure access.
+      await maybeRequestHostPermission(aiEl.baseUrl.value);
       const finalize = () => {
         settings.ai.configured = !!key;
         saveSettings(settings);

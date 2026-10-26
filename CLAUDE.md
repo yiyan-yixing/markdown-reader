@@ -57,7 +57,7 @@ Test dependencies are in `tests/package.json` (Playwright). The test script auto
 | GitHub/GitLab/Bitbucket blob pages | Inject floating "📖 Read in Reader" button → onclick fetches raw markdown via background SW (CORS bypass) |
 | Other | No-op |
 
-The popup's "Open in Markdown Reader" button sends `activateReader` message to simulate clicking the floating button.
+The popup's "Open in PageSew" button sends `activateReader` message to simulate clicking the floating button.
 
 ### Key Files
 

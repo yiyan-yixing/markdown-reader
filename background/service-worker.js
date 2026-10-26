@@ -3,8 +3,34 @@
  * Background script for message routing, side panel, and CORS-safe fetches
  * ========================================================================== */
 
-// Open side panel when action icon is clicked (Chrome 114+)
-chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => {});
+// The action has a default_popup, so Chrome must NOT open the side panel on
+// action click (MR-024). Explicitly disable it as well — an upgrade may have
+// persisted the old `true` behaviour.
+try {
+  chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: false })?.catch?.(() => {});
+} catch (_) {}
+
+// Only these URL schemes may be opened/fetched on behalf of a content script.
+function isAllowedUrl(url, schemes) {
+  try {
+    const u = new URL(String(url || ''));
+    return schemes.some(s => u.protocol === s);
+  } catch (_) { return false; }
+}
+
+// Reader tabs currently known to the extension (tabId → {url, filename, ts}).
+// Used by the side panel to find the tree without the "tabs" permission.
+const readerTabs = new Map();
+let lastReaderTabId = null;
+
+chrome.tabs.onRemoved.addListener(tabId => {
+  readerTabs.delete(tabId);
+  if (lastReaderTabId === tabId) lastReaderTabId = null;
+});
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  if (readerTabs.has(tabId)) lastReaderTabId = tabId;
+});
 
 // Local LLM endpoints (Ollama, LM Studio, llama.cpp …) reject requests whose
 // Origin is `chrome-extension://…` with HTTP 403. We strip the Origin header
@@ -45,8 +71,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.type) {
     // Content script needs to fetch a raw markdown URL (avoids CORS)
     case 'fetchRaw':
-      if (!msg.url) {
-        sendResponse({ success: false, error: 'No URL provided' });
+      if (!msg.url || !isAllowedUrl(msg.url, ['http:', 'https:'])) {
+        sendResponse({ success: false, error: 'Invalid URL' });
         return;
       }
 
@@ -66,20 +92,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       return true; // Keep channel open for async response
 
-    // Enumerate local directory (file://) — open hidden tab to read the listing
-    case 'enumerateDirectory':
-      if (!msg.url) {
-        sendResponse({ success: false, error: 'No URL provided' });
-        return;
+    // Enumerate local directory (file://) — open a hidden tab and read its
+    // directory listing. Responds asynchronously with `{success, files}`.
+    case 'enumerateDirectory': {
+      if (!msg.url || !isAllowedUrl(msg.url, ['file:'])) {
+        sendResponse({ success: false, error: 'Invalid folder URL', files: [] });
+        return false;
       }
-      // We'll send results back via a separate message to the calling tab
-      const callerTabId = sender.tab?.id;
-      chrome.tabs.create({ url: msg.url + '/', active: false }, newTab => {
-        const onUpdated = (tabId, changeInfo) => {
-          if (tabId !== newTab.id || changeInfo.status !== 'complete') return;
+      const dirUrl = String(msg.url).replace(/\/+$/, '') + '/';
+      let settled = false;
+      let timer = null;
+      let onUpdated = null;
+      const finish = (files, error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (onUpdated) { try { chrome.tabs.onUpdated.removeListener(onUpdated); } catch (_) {} }
+        try { chrome.tabs.remove(newTab.id); } catch (_) {}
+        sendResponse({ success: !error, files: files || [], error: error || null });
+      };
+      const newTab = chrome.tabs.create({ url: dirUrl, active: false }, tab => {
+        if (!tab || tab.id == null) { finish(null, 'Could not open the folder'); return; }
+        onUpdated = (tabId, changeInfo) => {
+          if (tabId !== tab.id || changeInfo.status !== 'complete') return;
           chrome.tabs.onUpdated.removeListener(onUpdated);
+          onUpdated = null;
           chrome.scripting.executeScript({
-            target: { tabId: newTab.id },
+            target: { tabId: tab.id },
             func: () => {
               const anchors = document.querySelectorAll('a');
               const seen = new Set();
@@ -87,9 +126,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               anchors.forEach(a => {
                 const href = a.getAttribute('href');
                 if (!href) return;
-                // Extract just the filename, handle full or relative paths
                 const raw = href.replace(/\/+$/, '').split('/').pop();
-                if (!raw || raw === '..' || raw === '.' || seen.has(raw)) return;
+                if (!raw || raw === '..' || raw === '.') return;
+                if (seen.has(raw)) return;
                 seen.add(raw);
                 items.push({
                   name: decodeURIComponent(raw),
@@ -99,21 +138,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               });
               return items;
             },
-          }).then(results => {
-            const files = results?.[0]?.result || [];
-            // Send results back to the content script that requested it
-            if (callerTabId) {
-              chrome.tabs.sendMessage(callerTabId, { type: 'directoryList', files }).catch(() => {});
-            }
-            chrome.tabs.remove(newTab.id);
-          }).catch(() => {
-            chrome.tabs.remove(newTab.id);
-          });
+          }).then(results => finish(results && results[0] ? results[0].result : [], null))
+            .catch(err => finish(null, String(err && err.message ? err.message : err)));
         };
         chrome.tabs.onUpdated.addListener(onUpdated);
+        timer = setTimeout(() => finish(null, 'Timed out listing the folder'), 6000);
       });
-      sendResponse({ success: true, pending: true });
-      return false;
+      return true; // async response
+    }
 
     // Content script requests file tree data
     case 'requestFileTree':
@@ -151,14 +183,90 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       });
       break;
 
-    // Open Chrome side panel (for content script "Browse other files" hint)
-    case 'openSidePanel':
-      chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-        if (tabs[0]?.id) {
-          chrome.sidePanel.open({ tabId: tabs[0].id }).catch(() => {});
-        }
-      });
+    // Open Chrome side panel (reader toolbar / popup "Browse files").
+    // `sidePanel.open` needs a user gesture; the click that sent this message
+    // preserves it in current Chrome. Failures are reported, never silent.
+    case 'openSidePanel': {
+      const tabId = (sender.tab && sender.tab.id) || msg.tabId;
+      if (!tabId) { sendResponse({ success: false, error: 'No tab id' }); return false; }
+      chrome.sidePanel.open({ tabId })
+        .then(() => sendResponse({ success: true }))
+        .catch(err => {
+          // Content-script messages may lose the user gesture. Fall back to
+          // opening the same file browser as a tab rather than failing silently.
+          chrome.tabs.create({ url: chrome.runtime.getURL('sidebar/sidebar.html') })
+            .then(t => sendResponse({ success: true, fallbackTab: t && t.id, error: String(err && err.message ? err.message : err) }))
+            .catch(() => sendResponse({ success: false, error: String(err && err.message ? err.message : err) }));
+        });
+      return true;
+    }
+
+    // Open a URL in a new tab (external-link action).
+    case 'openTab':
+      if (isAllowedUrl(msg.url, ['http:', 'https:', 'file:', 'view-source:'])) {
+        chrome.tabs.create({ url: msg.url })?.catch?.(() => {});
+      }
       break;
+
+    // Re-read a local file from disk (auto-refresh fallback).
+    case 'readFile':
+      if (!msg.url || !isAllowedUrl(msg.url, ['file:'])) { sendResponse({ success: false, error: 'Invalid file URL' }); return false; }
+      fetch(msg.url, { cache: 'no-store' })
+        .then(r => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then(text => sendResponse({ success: true, text }))
+        .catch(err => sendResponse({ success: false, error: String(err && err.message ? err.message : err) }));
+      return true;
+
+    // Content announces a mounted reader; the side panel uses this registry.
+    case 'readerReady':
+      if (sender.tab && sender.tab.id) {
+        readerTabs.set(sender.tab.id, {
+          url: msg.url || (sender.tab.url || ''),
+          filename: msg.filename || '',
+          ts: Date.now(),
+        });
+        lastReaderTabId = sender.tab.id;
+        // Let an open side panel refresh its current-file marker.
+        chrome.runtime.sendMessage({ type: 'readerChanged', tabId: sender.tab.id }).catch(() => {});
+      }
+      sendResponse({ ok: true });
+      break;
+
+    // Side panel: ask the most recently active reader tab for its file tree.
+    case 'getActiveReaderTree': {
+      const pick = () => {
+        if (lastReaderTabId != null && readerTabs.has(lastReaderTabId)) return lastReaderTabId;
+        let best = null;
+        let bestTs = -1;
+        readerTabs.forEach((v, k) => { if (v.ts > bestTs) { bestTs = v.ts; best = k; } });
+        return best;
+      };
+      const reply = (tabId, resp) => sendResponse(Object.assign({ success: true, tabId }, resp || {}));
+
+      // Fast path: the tab we remembered. If the SW was restarted, the map is
+      // empty, so fall back to probing every tab (messaging needs no host
+      // permission — content scripts answer only on reader pages).
+      const tryTab = async (tabId) => {
+        try {
+          const resp = await chrome.tabs.sendMessage(tabId, { type: 'requestFileTree' });
+          if (resp && resp.readerActive !== false && Array.isArray(resp.data) && resp.data.length) {
+            reply(tabId, resp); return true;
+          }
+        } catch (_) {}
+        return false;
+      };
+      (async () => {
+        const remembered = pick();
+        if (remembered != null && await tryTab(remembered)) return;
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.id == null || tab.id === remembered) continue;
+          if (await tryTab(tab.id)) return;
+        }
+        sendResponse({ success: false, data: [], reason: 'no-reader' });
+      })();
+      return true;
+    }
 
     // Is an AI API key configured? The SW is the single source of truth — the
     // key lives only in storage.local, so we never hand the value to content;
@@ -283,7 +391,7 @@ function extractDelta(provider, payload) {
   return (delta && typeof delta.content === 'string') ? delta.content : '';
 }
 
-async function streamLLM(port, msg) {
+async function streamLLM(port, msg, signal) {
   const provider = msg.provider === 'anthropic' ? 'anthropic' : 'openai';
   const messages = Array.isArray(msg.messages) ? msg.messages : [];
 
@@ -336,7 +444,7 @@ async function streamLLM(port, msg) {
 
   let resp;
   try {
-    resp = await fetch(url, init);
+    resp = await fetch(url, Object.assign({}, init, { signal }));
   } catch (err) {
     port.postMessage({ type: 'error', error: '网络请求失败：' + (err && err.message ? err.message : err) + '（请检查 Base URL 与 host 权限）' });
     return;
@@ -369,6 +477,7 @@ async function streamLLM(port, msg) {
   let buffer = '';
 
   while (true) {
+    if (signal && signal.aborted) { try { await reader.cancel(); } catch (_) {} return; }
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -405,9 +514,11 @@ async function finishJson(resp, provider, post) {
 
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== 'md-reader-llm') return;
+  const controller = new AbortController();
+  port.onDisconnect.addListener(() => controller.abort());
   port.onMessage.addListener(msg => {
     if (!msg || msg.type !== 'aiComplete') return;
-    streamLLM(port, msg).catch(err => {
+    streamLLM(port, msg, controller.signal).catch(err => {
       try { port.postMessage({ type: 'error', error: 'LLM 调用异常：' + (err && err.message ? err.message : err) }); } catch (_) {}
     });
   });

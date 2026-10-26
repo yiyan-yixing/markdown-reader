@@ -6,7 +6,7 @@
 
 ## Single purpose
 
-**Markdown Reader** renders `.md` files in a clean three-panel reading interface
+**PageSew** renders `.md` files in a clean three-panel reading interface
 (file tree · rendered content · outline). All capabilities are in service of
 reading Markdown: rendering, navigation, themes, and reading-comprehension
 helpers (AI translate / summarize using the user's own model).
@@ -47,14 +47,21 @@ Stores user preferences (theme, font size, feature toggles) and the user's own
 AI API key — all locally (`chrome.storage.local` / `chrome.storage.sync`).
 Nothing is uploaded to any server we operate.
 
-### `activeTab`, `scripting`, `sidePanel`
+### `scripting`, `sidePanel`
 
-Used to render the reader UI in the active tab when the user opens a Markdown
-file, and to show the optional file-tree side panel.
+`scripting` and `sidePanel` support the reader UI and the optional file-tree
+side panel. The content script is not injected site-wide: its `matches` list is
+restricted to Markdown file extensions only — `*.md`, `*.markdown`, `*.mdown`,
+`*.mkd` over `http`/`https`, and `file:///*.md` (plus the same three alternate
+extensions) for local files. No other pages are matched. The `activeTab`
+permission is not used and is not requested.
 
 ### `host_permissions` (raw.githubusercontent / gitlab / bitbucket / file://)
 
 Used only to fetch raw Markdown text from those hosts so it can be rendered.
+For local files, `file:///*` is used to read the selected Markdown file and, when
+the user views a local file, to list its sibling Markdown files for the file
+tree. No local file content is uploaded anywhere.
 
 ### `optional_host_permissions` (http://*/*, https://*/*)
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Markdown Reader</title>
+  <title>PageSew</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -11,8 +11,8 @@
     <div class="popup-header">
       <img src="../icons/icon48.png" class="popup-logo" alt="M" width="36" height="36">
       <div>
-        <h1 class="popup-title">Markdown Reader</h1>
-        <p class="popup-version">v1.3.0</p>
+        <h1 class="popup-title">PageSew</h1>
+        <p class="popup-version">v1.3.1</p>
       </div>
     </div>
 
@@ -56,10 +56,11 @@
           </div>
         </div>
 
-        <div class="popup-feature" data-key="customCSS">
+        <div class="popup-feature popup-feature-stacked" data-key="customCSS">
           <span class="popup-check">✓</span>
           <div class="popup-feature-text">
             <div class="popup-feature-label">Custom CSS</div>
+            <textarea class="popup-textarea" id="customCSS" rows="3" placeholder=".md-content h1 { color: red; }"></textarea>
           </div>
         </div>
 
@@ -82,10 +83,16 @@
           </div>
         </div>
 
-        <div class="popup-feature" data-key="pluginOptions">
+        <div class="popup-feature popup-feature-stacked" data-key="pluginOptions">
           <span class="popup-check">✓</span>
           <div class="popup-feature-text">
             <div class="popup-feature-label">Markdown plugin options</div>
+            <div class="popup-plugin-options">
+              <label><input type="checkbox" data-plugin-option="gfmTables" /> Tables</label>
+              <label><input type="checkbox" data-plugin-option="gfmTaskLists" /> Task lists</label>
+              <label><input type="checkbox" data-plugin-option="gfmStrikethrough" /> Strikethrough</label>
+              <label><input type="checkbox" data-plugin-option="gfmAutolinks" /> Autolinks</label>
+            </div>
           </div>
         </div>
 
@@ -109,6 +116,9 @@
         </button>
         <button class="popup-theme-btn" data-theme="dark">
           <span>🌙</span> Dark
+        </button>
+        <button class="popup-theme-btn" data-theme="auto">
+          <span>🌗</span> Auto
         </button>
       </div>
       <div class="popup-theme-toggle popup-theme-grid">
@@ -199,19 +209,32 @@
       <button class="popup-ai-done-btn" id="aiDoneBtn" type="button" style="display:none;">✓ 完成，返回阅读</button>
     </div>
 
+    <div class="popup-section">
+      <button class="popup-activate-btn" id="popupBrowseFiles" type="button">
+        📁 Browse files in side panel
+      </button>
+    </div>
+
     <div class="popup-section" id="popup-activate-section" style="display:none;">
       <button class="popup-activate-btn" id="popupActivateReader">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
         </svg>
-        Open in Markdown Reader
+        Open in PageSew
       </button>
       <div class="popup-activate-hint">This page is already rendered — click to switch to reader mode</div>
     </div>
 
+    <div class="popup-section">
+      <button class="popup-activate-btn" id="popupTrySample" type="button">
+        📄 Try a sample document
+      </button>
+      <div class="popup-activate-hint">Opens a public .md file so you can see the reader immediately</div>
+    </div>
+
     <div class="popup-footer">
-      <span id="popup-status-text">Open a .md file to activate</span>
+      <span id="popup-status-text">Open a .md file or a direct .md link — for local files, enable “Allow access to file URLs”</span>
     </div>
   </div>
 

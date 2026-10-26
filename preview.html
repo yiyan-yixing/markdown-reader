@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Markdown Reader — Live Preview</title>
+  <title>PageSew — Live Preview</title>
   <link rel="stylesheet" href="styles/reader.css">
   <link rel="stylesheet" href="styles/themes/light.css">
   <link rel="stylesheet" href="styles/themes/dark.css">
@@ -15,9 +15,9 @@
 </head>
 <body>
   <textarea id="test-raw" style="display:none;">
-# Markdown Reader — Sample Document
+# PageSew — Sample Document
 
-This is a **sample Markdown file** to demonstrate the Markdown Reader Chrome extension.
+This is a **sample Markdown file** to demonstrate the PageSew Chrome extension.
 
 ## Features
 
@@ -34,7 +34,7 @@ This is a **sample Markdown file** to demonstrate the Markdown Reader Chrome ext
 ```javascript
 function greet(name) {
   console.log(`Hello, ${name}!`);
-  return { message: `Welcome to Markdown Reader` };
+  return { message: `Welcome to PageSew` };
 }
 
 const reader = greet('World');
@@ -47,7 +47,7 @@ from dataclasses import dataclass
 
 @dataclass
 class MarkdownReader:
-    name: str = "Markdown Reader"
+    name: str = "PageSew"
     version: str = "1.0.0"
     features: list = None
 
@@ -93,9 +93,10 @@ class MarkdownReader:
 
 ---
 
-*This file is part of the Markdown Reader Chrome extension.*
+*This file is part of the PageSew Chrome extension.*
   </textarea>
 
+  <script src="lib/dompurify.min.js"></script>
   <script src="lib/marked.min.js"></script>
   <script src="lib/highlight.min.js"></script>
   <script>

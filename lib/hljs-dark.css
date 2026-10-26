@@ -8,3 +8,89 @@ pre code.hljs{display:block;overflow-x:auto;padding:1em}code.hljs{padding:3px 5p
   Outdated base version: https://github.com/primer/github-syntax-dark
   Current colors taken from GitHub's CSS
 */.hljs{color:#c9d1d9;background:#0d1117}.hljs-doctag,.hljs-keyword,.hljs-meta .hljs-keyword,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language_{color:#ff7b72}.hljs-title,.hljs-title.class_,.hljs-title.class_.inherited__,.hljs-title.function_{color:#d2a8ff}.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable{color:#79c0ff}.hljs-meta .hljs-string,.hljs-regexp,.hljs-string{color:#a5d6ff}.hljs-built_in,.hljs-symbol{color:#ffa657}.hljs-code,.hljs-comment,.hljs-formula{color:#8b949e}.hljs-name,.hljs-quote,.hljs-selector-pseudo,.hljs-selector-tag{color:#7ee787}.hljs-subst{color:#c9d1d9}.hljs-section{color:#1f6feb;font-weight:700}.hljs-bullet{color:#f2cc60}.hljs-emphasis{color:#c9d1d9;font-style:italic}.hljs-strong{color:#c9d1d9;font-weight:700}.hljs-addition{color:#aff5b4;background-color:#033a16}.hljs-deletion{color:#ffdcd7;background-color:#67060c}
+/* ── PageSew: dark-family themes ─────────────────────────────────────────── */
+[data-theme="dark"] .md-code-block .hljs,
+[data-theme="nord"] .md-code-block .hljs,
+[data-theme="dracula"] .md-code-block .hljs,
+[data-theme="tokyo-night"] .md-code-block .hljs {
+  background: transparent;
+  color: var(--md-code-text);
+}
+[data-theme="dark"] .hljs-comment,
+[data-theme="dark"] .hljs-quote { color: #8b949e; font-style: italic; }
+[data-theme="dark"] .hljs-keyword,
+[data-theme="dark"] .hljs-selector-tag,
+[data-theme="dark"] .hljs-literal,
+[data-theme="dark"] .hljs-type { color: #ff7b72; }
+[data-theme="dark"] .hljs-string,
+[data-theme="dark"] .hljs-regexp,
+[data-theme="dark"] .hljs-addition { color: #a5d6ff; }
+[data-theme="dark"] .hljs-number,
+[data-theme="dark"] .hljs-attr,
+[data-theme="dark"] .hljs-variable { color: #79c0ff; }
+[data-theme="dark"] .hljs-title,
+[data-theme="dark"] .hljs-function .hljs-title { color: #d2a8ff; }
+[data-theme="dark"] .hljs-built_in,
+[data-theme="dark"] .hljs-symbol { color: #ffa657; }
+[data-theme="dark"] .hljs-name,
+[data-theme="dark"] .hljs-tag { color: #7ee787; }
+
+/* Nord */
+[data-theme="nord"] .hljs-comment,
+[data-theme="nord"] .hljs-quote { color: #616e88; font-style: italic; }
+[data-theme="nord"] .hljs-keyword,
+[data-theme="nord"] .hljs-selector-tag,
+[data-theme="nord"] .hljs-literal,
+[data-theme="nord"] .hljs-type { color: #81a1c1; }
+[data-theme="nord"] .hljs-string,
+[data-theme="nord"] .hljs-regexp,
+[data-theme="nord"] .hljs-addition { color: #a3be8c; }
+[data-theme="nord"] .hljs-number,
+[data-theme="nord"] .hljs-attr,
+[data-theme="nord"] .hljs-variable { color: #b48ead; }
+[data-theme="nord"] .hljs-title,
+[data-theme="nord"] .hljs-function .hljs-title { color: #88c0d0; }
+[data-theme="nord"] .hljs-built_in,
+[data-theme="nord"] .hljs-symbol { color: #ebcb8b; }
+[data-theme="nord"] .hljs-name,
+[data-theme="nord"] .hljs-tag { color: #8fbcbb; }
+
+/* Dracula */
+[data-theme="dracula"] .hljs-comment,
+[data-theme="dracula"] .hljs-quote { color: #6272a4; font-style: italic; }
+[data-theme="dracula"] .hljs-keyword,
+[data-theme="dracula"] .hljs-selector-tag,
+[data-theme="dracula"] .hljs-literal,
+[data-theme="dracula"] .hljs-type { color: #ff79c6; }
+[data-theme="dracula"] .hljs-string,
+[data-theme="dracula"] .hljs-regexp,
+[data-theme="dracula"] .hljs-addition { color: #f1fa8c; }
+[data-theme="dracula"] .hljs-number,
+[data-theme="dracula"] .hljs-attr,
+[data-theme="dracula"] .hljs-variable { color: #bd93f9; }
+[data-theme="dracula"] .hljs-title,
+[data-theme="dracula"] .hljs-function .hljs-title { color: #50fa7b; }
+[data-theme="dracula"] .hljs-built_in,
+[data-theme="dracula"] .hljs-symbol { color: #ffb86c; }
+[data-theme="dracula"] .hljs-name,
+[data-theme="dracula"] .hljs-tag { color: #8be9fd; }
+
+/* Tokyo Night */
+[data-theme="tokyo-night"] .hljs-comment,
+[data-theme="tokyo-night"] .hljs-quote { color: #565f89; font-style: italic; }
+[data-theme="tokyo-night"] .hljs-keyword,
+[data-theme="tokyo-night"] .hljs-selector-tag,
+[data-theme="tokyo-night"] .hljs-literal,
+[data-theme="tokyo-night"] .hljs-type { color: #bb9af7; }
+[data-theme="tokyo-night"] .hljs-string,
+[data-theme="tokyo-night"] .hljs-regexp,
+[data-theme="tokyo-night"] .hljs-addition { color: #9ece6a; }
+[data-theme="tokyo-night"] .hljs-number,
+[data-theme="tokyo-night"] .hljs-attr,
+[data-theme="tokyo-night"] .hljs-variable { color: #ff9e64; }
+[data-theme="tokyo-night"] .hljs-title,
+[data-theme="tokyo-night"] .hljs-function .hljs-title { color: #7aa2f7; }
+[data-theme="tokyo-night"] .hljs-built_in,
+[data-theme="tokyo-night"] .hljs-symbol { color: #e0af68; }
+[data-theme="tokyo-night"] .hljs-name,
+[data-theme="tokyo-night"] .hljs-tag { color: #2ac3de; }
