@@ -68,9 +68,10 @@ Five screenshots, each **1280×800 PNG**, present in `store-assets/screenshots/`
 
 - **Category:** Productivity (single selection — do not also select Developer
   Tools; CWS allows one category)
-- **Primary listing language:** English (single store field). The UI supports both
-  English and Simplified Chinese; describe it as bilingual in the description,
-  but select English as the store language.
+- **Primary listing language:** English (single store field). Do **not** claim a
+  bilingual UI: there is no `_locales` and no language switch — the reader UI is
+  English, with some Chinese labels in the popup. Chinese is offered only as a
+  store-localization of the listing text, not as an interface language.
 - **Support email:** yiyanyixing880@gmail.com
 - **Homepage / issues:** https://github.com/yiyan-yixing/markdown-reader
 
